@@ -135,6 +135,7 @@ import static org.wso2.lsp4intellij.editor.EditorEventManagerBase.getCtrlRange;
 import static org.wso2.lsp4intellij.editor.EditorEventManagerBase.getIsCtrlDown;
 import static org.wso2.lsp4intellij.editor.EditorEventManagerBase.getIsKeyPressed;
 import static org.wso2.lsp4intellij.editor.EditorEventManagerBase.setCtrlRange;
+import static org.wso2.lsp4intellij.utils.ApplicationUtils.computableReadAction;
 
 /**
  * Class handling events related to an Editor (a Document)
@@ -497,10 +498,10 @@ public class EditorEventManager {
                 this.diagnostics.clear();
                 this.diagnostics.addAll(diagnostics);
             }
-            // PsiFile psiFile = computableReadAction(
-            // () -> PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()));
-            // // Forcefully triggers local inspection tool.
-            // runInspection(psiFile);
+            PsiFile psiFile = computableReadAction(
+                    () -> PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument()));
+            // Forcefully triggers local inspection tool.
+            runInspection(psiFile);
         }
     }
 
@@ -595,8 +596,8 @@ public class EditorEventManager {
             DocumentRangeFormattingParams params = new DocumentRangeFormattingParams();
             params.setTextDocument(identifier);
             SelectionModel selectionModel = editor.getSelectionModel();
-            int start = ApplicationUtils.computableReadAction(selectionModel::getSelectionStart);
-            int end = ApplicationUtils.computableReadAction(selectionModel::getSelectionEnd);
+            int start = computableReadAction(selectionModel::getSelectionStart);
+            int end = computableReadAction(selectionModel::getSelectionEnd);
             Position startingPos = DocumentUtils.offsetToLSPPos(editor, start);
             Position endPos = DocumentUtils.offsetToLSPPos(editor, end);
             params.setRange(new Range(startingPos, endPos));
@@ -646,8 +647,7 @@ public class EditorEventManager {
      * @param point     The point at which to show the hint
      */
     private void requestAndShowDoc(long curTime, LogicalPosition editorPos, Point point) {
-        Position serverPos = ApplicationUtils
-                .computableReadAction(() -> DocumentUtils.logicalToLSPPos(editorPos, editor));
+        Position serverPos = computableReadAction(() -> DocumentUtils.logicalToLSPPos(editorPos, editor));
         CompletableFuture<Hover> request = requestManager.hover(new TextDocumentPositionParams(identifier, serverPos));
         if (request == null) {
             return;
