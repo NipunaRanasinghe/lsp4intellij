@@ -513,7 +513,7 @@ public class EditorEventManager {
         if (document != null) {
             DumbService.getInstance(project).smartInvokeLater(() -> {
                 LocalInspectionsPass localInspectionsPass = new LocalInspectionsPass(psiFile, document, 0,
-                        document.getTextLength(), LocalInspectionsPass.EMPTY_PRIORITY_RANGE, true,
+                        document.getTextLength(), LocalInspectionsPass.EMPTY_PRIORITY_RANGE, false,
                         HighlightInfoProcessor.getEmpty());
                 ProgressManager.getInstance().runProcess(() -> {
                     localInspectionsPass
@@ -521,7 +521,7 @@ public class EditorEventManager {
                                     inspectionToolWrapper);
                     UpdateHighlightersUtil
                             .setHighlightersToEditor(psiFile.getProject(), document, 0, document.getTextLength(),
-                                    localInspectionsPass.getInfos(), null, Pass.UPDATE_ALL);
+                                    localInspectionsPass.getInfos(), null, Pass.LOCAL_INSPECTIONS);
                 }, new EmptyProgressIndicator());
             });
         }

@@ -43,6 +43,7 @@ import org.wso2.lsp4intellij.utils.DocumentUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
 
 import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
 import java.util.List;
 import javax.swing.*;
 
@@ -61,7 +62,13 @@ public class LSPInspection extends LocalInspectionTool implements DumbAware {
             String uri = FileUtils.VFSToURI(virtualFile);
             EditorEventManager eventManager = EditorEventManagerBase.forUri(uri);
             if (eventManager != null) {
-                return descriptorsForManager(uri, eventManager, file, manager, isOnTheFly);
+                try {
+                    return descriptorsForManager(uri, eventManager, file, manager, isOnTheFly);
+                } catch (ConcurrentModificationException e) {
+                    // Dirty hack to handle intermittent ConcurrentModificationException.
+                    // Todo - Fix
+                    return null;
+                }
             } else {
                 if (isOnTheFly) {
                     return super.checkFile(file, manager, isOnTheFly);
