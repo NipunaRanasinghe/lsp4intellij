@@ -190,7 +190,10 @@ public class FileUtils {
     }
 
     public static String editorToProjectFolderPath(Editor editor) {
-        return new File(editor.getProject().getBasePath()).getAbsolutePath();
+        if (editor != null && editor.getProject() != null && editor.getProject().getBasePath() != null) {
+            return new File(editor.getProject().getBasePath()).getAbsolutePath();
+        }
+        return null;
     }
 
     /**
