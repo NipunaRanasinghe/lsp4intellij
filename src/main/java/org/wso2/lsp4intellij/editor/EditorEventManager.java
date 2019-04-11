@@ -308,9 +308,17 @@ public class EditorEventManager {
         createCtrlRange(DocumentUtils.logicalToLSPPos(editor.xyToLogicalPosition(e.getMouseEvent().getPoint()), editor),
                 null);
         final CtrlRangeMarker ctrlRange = getCtrlRange();
+
         if (ctrlRange == null) {
+            int offset = editor.logicalPositionToOffset(editor.xyToLogicalPosition(e.getMouseEvent().getPoint()));
+            LSPReferencesAction referencesAction = (LSPReferencesAction) ActionManager.getInstance()
+                    .getAction("LSPFindUsages");
+            if (referencesAction != null) {
+                referencesAction.forManagerAndOffset(this, offset);
+            }
             return;
         }
+
         Location loc = ctrlRange.location;
         ApplicationUtils.invokeLater(() -> {
             if (editor.isDisposed()) {
@@ -318,10 +326,9 @@ public class EditorEventManager {
             }
             int offset = editor.logicalPositionToOffset(editor.xyToLogicalPosition(e.getMouseEvent().getPoint()));
             String locUri = FileUtils.sanitizeURI(loc.getUri());
-            if (identifier.getUri().equals(locUri)
-                    && DocumentUtils.LSPPosToOffset(editor, loc.getRange().getStart()) <= offset
-                    && offset <= DocumentUtils.LSPPosToOffset(editor, loc.getRange().getEnd())) {
-                // Todo - Add when implementing show references action
+            if (identifier.getUri().equals(locUri) && offset >= DocumentUtils
+                    .LSPPosToOffset(editor, loc.getRange().getStart()) && offset <= DocumentUtils
+                    .LSPPosToOffset(editor, loc.getRange().getEnd())) {
                 LSPReferencesAction referencesAction = (LSPReferencesAction) ActionManager.getInstance()
                         .getAction("LSPFindUsages");
                 if (referencesAction != null) {
@@ -904,19 +911,21 @@ public class EditorEventManager {
                 return () -> {
                     edits.forEach(edit -> {
                         String text = edit.getNewText();
-                        if (text == null || text.isEmpty()) {
-                            return;
-                        }
-                        text = text.replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
                         Range range = edit.getRange();
+                        // LSPPosToOffset() will return -1, if any IndexOutOfBoundException is occurred.
                         int start = DocumentUtils.LSPPosToOffset(editor, range.getStart());
                         int end = DocumentUtils.LSPPosToOffset(editor, range.getEnd());
-                        if (text == null || text.equals("")) {
+                        if (text == null || text.isEmpty()) {
                             document.deleteString(start, end);
-                        } else if (end - start <= 0 || end < 0) {
-                            document.insertString(start, text);
                         } else {
-                            document.replaceString(start, end, text);
+                            text = text.replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
+                            if (!(start < 0 && end < 0)) {
+                                if (end - start <= 0) {
+                                    document.insertString(start, text);
+                                } else {
+                                    document.replaceString(start, end, text);
+                                }
+                            }
                         }
                     });
                     saveDocument();
