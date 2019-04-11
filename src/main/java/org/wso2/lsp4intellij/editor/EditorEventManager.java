@@ -903,8 +903,11 @@ public class EditorEventManager {
             if (document.isWritable()) {
                 return () -> {
                     edits.forEach(edit -> {
-                        String text = edit.getNewText()
-                                .replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
+                        String text = edit.getNewText();
+                        if (text == null || text.isEmpty()) {
+                            return;
+                        }
+                        text = text.replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
                         Range range = edit.getRange();
                         int start = DocumentUtils.LSPPosToOffset(editor, range.getStart());
                         int end = DocumentUtils.LSPPosToOffset(editor, range.getEnd());
