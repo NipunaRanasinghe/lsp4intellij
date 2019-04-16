@@ -908,28 +908,30 @@ public class EditorEventManager {
         if (version >= this.version) {
             Document document = editor.getDocument();
             if (document.isWritable()) {
-                return () -> {
-                    edits.forEach(edit -> {
-                        String text = edit.getNewText();
-                        Range range = edit.getRange();
-                        // LSPPosToOffset() will return -1, if any IndexOutOfBoundException is occurred.
-                        int start = DocumentUtils.LSPPosToOffset(editor, range.getStart());
-                        int end = DocumentUtils.LSPPosToOffset(editor, range.getEnd());
-                        if (text == null || text.isEmpty()) {
-                            document.deleteString(start, end);
-                        } else {
-                            text = text.replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
-                            if (!(start < 0 && end < 0)) {
-                                if (end - start <= 0) {
-                                    document.insertString(start, text);
-                                } else {
-                                    document.replaceString(start, end, text);
-                                }
+                return () -> edits.forEach(edit -> {
+                    String text = edit.getNewText();
+                    Range range = edit.getRange();
+                    // LSPPosToOffset() will return -1, if any IndexOutOfBoundException is occurred.
+                    int start = DocumentUtils.LSPPosToOffset(editor, range.getStart());
+                    int end = DocumentUtils.LSPPosToOffset(editor, range.getEnd());
+                    if (text == null || text.isEmpty()) {
+                        document.deleteString(start, end);
+                    } else {
+                        text = text.replace(DocumentUtils.WIN_SEPARATOR, DocumentUtils.LINUX_SEPARATOR);
+                        if (end >= 0) {
+                            if (end - start <= 0) {
+                                document.insertString(start, text);
+                            } else {
+                                document.replaceString(start, end, text);
                             }
+                        } else if (start == 0) {
+                            document.setText(text);
+                        } else if (start > 0) {
+                            document.insertString(start, text);
                         }
-                    });
+                    }
                     saveDocument();
-                };
+                });
             } else {
                 LOG.warn("Document is not writable");
                 return null;
@@ -976,8 +978,7 @@ public class EditorEventManager {
     }
 
     private void saveDocument() {
-        ApplicationUtils.invokeLater(() -> ApplicationUtils
-                .writeAction(() -> FileDocumentManager.getInstance().saveDocument(editor.getDocument())));
+        FileDocumentManager.getInstance().saveDocument(editor.getDocument());
     }
 
     /**
