@@ -156,9 +156,9 @@ public class EditorEventManager {
     public LanguageServerWrapper wrapper;
     public List<String> completionTriggers;
     protected Project project;
-    private RequestManager requestManager;
+    protected TextDocumentIdentifier identifier;
+    protected RequestManager requestManager;
     private ServerOptions serverOptions;
-    private TextDocumentIdentifier identifier;
     private DocumentListener documentListener;
     private EditorMouseListener mouseListener;
     private EditorMouseMotionListener mouseMotionListener;
