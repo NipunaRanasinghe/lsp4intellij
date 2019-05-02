@@ -172,10 +172,10 @@ public class EditorEventManager {
     public Editor editor;
     public LanguageServerWrapper wrapper;
     public List<String> completionTriggers;
-    protected Project project;
-    private RequestManager requestManager;
+    public Project project;
+    public RequestManager requestManager;
     private ServerOptions serverOptions;
-    private TextDocumentIdentifier identifier;
+    public TextDocumentIdentifier identifier;
     private DocumentListener documentListener;
     private EditorMouseListener mouseListener;
     private EditorMouseMotionListener mouseMotionListener;
