@@ -52,7 +52,7 @@ public class WorkspaceSymbolProvider {
   public List<NavigationItem> workspaceSymbols(String name, Project project) {
     final Set<LanguageServerWrapper> serverWrappers = IntellijLanguageClient
         .getProjectToLanguageWrappers()
-        .getOrDefault(FileUtils.pathToUri(project.getBasePath()), Collections.emptySet());
+        .getOrDefault(FileUtils.projectToUri(project), Collections.emptySet());
 
     final WorkspaceSymbolParams symbolParams = new WorkspaceSymbolParams(name);
     return serverWrappers.stream().filter(s -> s.getStatus() == ServerStatus.INITIALIZED)

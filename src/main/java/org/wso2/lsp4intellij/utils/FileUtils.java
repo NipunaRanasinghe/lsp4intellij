@@ -27,6 +27,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.FilenameIndex;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -268,7 +269,7 @@ public class FileUtils {
         return Arrays.stream(ProjectManager.getInstance().getOpenProjects())
                 .flatMap(p -> Arrays.stream(searchFiles(file, p)))
                 .filter(f -> f.getVirtualFile().getPath().equals(file.getPath()))
-                .map(f -> f.getProject())
+                .map(PsiElement::getProject)
                 .collect(Collectors.toSet());
     }
 
