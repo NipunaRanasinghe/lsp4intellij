@@ -52,7 +52,7 @@ public class LSPAnnotator extends ExternalAnnotator {
             VirtualFile virtualFile = file.getVirtualFile();
 
             // If the file is not supported, we skips the annotation by returning null.
-            if (!FileUtils.isFileSupported(virtualFile) || !IntellijLanguageClient.isExtensionSupported(virtualFile.getExtension())) {
+            if (!FileUtils.isFileSupported(virtualFile) || !IntellijLanguageClient.isExtensionSupported(virtualFile)) {
                 return null;
             }
             String uri = FileUtils.VFSToURI(virtualFile);
@@ -78,7 +78,7 @@ public class LSPAnnotator extends ExternalAnnotator {
     public void apply(@NotNull PsiFile file, Object annotationResult, @NotNull AnnotationHolder holder) {
 
         VirtualFile virtualFile = file.getVirtualFile();
-        if (FileUtils.isFileSupported(virtualFile) && IntellijLanguageClient.isExtensionSupported(virtualFile.getExtension())) {
+        if (FileUtils.isFileSupported(virtualFile) && IntellijLanguageClient.isExtensionSupported(virtualFile)) {
             String uri = FileUtils.VFSToURI(virtualFile);
             EditorEventManager eventManager = EditorEventManagerBase.forUri(uri);
 

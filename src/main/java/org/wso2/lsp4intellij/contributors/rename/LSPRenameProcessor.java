@@ -16,14 +16,12 @@
 package org.wso2.lsp4intellij.contributors.rename;
 
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.fileEditor.FileEditor;
-import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiReference;
+import com.intellij.psi.search.SearchScope;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
 import com.intellij.refactoring.rename.RenameDialog;
 import com.intellij.refactoring.rename.RenamePsiElementProcessor;
@@ -53,52 +51,25 @@ public class LSPRenameProcessor extends RenamePsiElementProcessor {
 
     @Override
     public boolean canProcessElement(@NotNull PsiElement element) {
-        if (element instanceof LSPPsiElement) {
-            return true;
-        } else if (element instanceof PsiFile) {
-            FileEditor fEditor = FileEditorManager.getInstance(element.getProject())
-                    .getSelectedEditor(((PsiFile) element).getVirtualFile());
-            if (!(fEditor instanceof Editor)) {
-                return false;
-            }
-            Editor editor = (Editor) fEditor;
-            EditorEventManager manager = EditorEventManagerBase.forEditor(editor);
-            if (manager != null) {
-                if (editor.getContentComponent().hasFocus()) {
-                    int offset = editor.getCaretModel().getCurrentCaret().getOffset();
-                    Pair<List<PsiElement>, List<VirtualFile>> refResponse = manager.references(offset, true, false);
-                    this.elements.addAll(refResponse.getFirst());
-                    LSPRenameProcessor.openedEditors.addAll(refResponse.getSecond());
-                    this.curElem = elements.stream()
-                            .filter(e -> e.getTextRange().getStartOffset() <= offset && offset <= e.getTextRange()
-                                    .getEndOffset()).findAny().orElse(null);
-                    if (curElem != null) {
-                        this.elements = this.elements.stream().filter(elem -> elem.getText().equals(curElem.getText()))
-                                .collect(Collectors.toSet());
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        return false;
+        return element instanceof LSPPsiElement;
     }
 
     @Override
     public RenameDialog createRenameDialog(Project project, PsiElement element, PsiElement nameSuggestionContext,
-            Editor editor) {
+                                           Editor editor) {
         return super.createRenameDialog(project, curElem, nameSuggestionContext, editor);
     }
 
     @NotNull
     @Override
-    public Collection<PsiReference> findReferences(PsiElement element) {
+    public Collection<PsiReference> findReferences(@NotNull PsiElement element) {
         return findReferences(element, false);
     }
 
+    // Todo - remove and change the minimum compatible version to IDEA 2019.2, once this deprecated method is removed.
     @NotNull
-    @Override
-    public Collection<PsiReference> findReferences(PsiElement element, boolean searchInCommentsAndStrings) {
+    @SuppressWarnings("unused")
+    public Collection<PsiReference> findReferences(@NotNull PsiElement element, boolean searchInCommentsAndStrings) {
         if (element instanceof LSPPsiElement) {
             if (elements.contains(element)) {
                 return elements.stream().map(PsiElement::getReference).collect(Collectors.toList());
@@ -116,19 +87,40 @@ public class LSPRenameProcessor extends RenamePsiElementProcessor {
         return new ArrayList<>();
     }
 
-    @Override
-    public boolean isInplaceRenameSupported() {
-        return true;
+    @NotNull
+    @SuppressWarnings("unused")
+    public Collection<PsiReference> findReferences(@NotNull PsiElement element, @NotNull SearchScope searchScope,
+                                                   boolean searchInCommentsAndStrings) {
+        if (element instanceof LSPPsiElement) {
+            if (elements.contains(element)) {
+                return elements.stream().map(PsiElement::getReference).collect(Collectors.toList());
+            } else {
+                EditorEventManager manager = EditorEventManagerBase
+                        .forEditor(FileUtils.editorFromPsiFile(element.getContainingFile()));
+                if (manager != null) {
+                    Pair<List<PsiElement>, List<VirtualFile>> refs = manager
+                            .references(element.getTextOffset(), true, false);
+                    addEditors(refs.getSecond());
+                    return refs.getFirst().stream().map(PsiElement::getReference).collect(Collectors.toList());
+                }
+            }
+        }
+        return new ArrayList<>();
     }
 
     //TODO may rename invalid elements
     @Override
-    public void renameElement(PsiElement element, String newName, UsageInfo[] usages,
-            RefactoringElementListener listener) {
+    public void renameElement(@NotNull PsiElement element, @NotNull String newName, @NotNull UsageInfo[] usages,
+                              RefactoringElementListener listener) {
         WorkspaceEditHandler.applyEdit(element, newName, usages, listener, new ArrayList<>(openedEditors));
         openedEditors.clear();
         elements.clear();
         curElem = null;
+    }
+
+    @Override
+    public boolean isInplaceRenameSupported() {
+        return true;
     }
 
     public static void clearEditors() {
@@ -139,9 +131,7 @@ public class LSPRenameProcessor extends RenamePsiElementProcessor {
         return openedEditors;
     }
 
-    public static void addEditors(List<VirtualFile> toAdd) {
+    static void addEditors(List<VirtualFile> toAdd) {
         openedEditors.addAll(toAdd);
     }
 }
-
-

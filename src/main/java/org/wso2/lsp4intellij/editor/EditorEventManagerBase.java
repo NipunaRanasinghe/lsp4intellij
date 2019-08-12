@@ -17,8 +17,9 @@ package org.wso2.lsp4intellij.editor;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
+import org.wso2.lsp4intellij.utils.OSUtils;
 
-import java.awt.*;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,7 @@ public class EditorEventManagerBase {
     public static Map<String, EditorEventManager> uriToManager = new ConcurrentHashMap<>();
     public static Map<Editor, EditorEventManager> editorToManager = new ConcurrentHashMap<>();
 
+    private static int CTRL_KEY_CODE = OSUtils.isMac() ? KeyEvent.VK_META : KeyEvent.VK_CONTROL;
     private volatile static boolean isKeyPressed = false;
     private volatile static boolean isCtrlDown = false;
     private volatile static CtrlRangeMarker ctrlRange;
@@ -43,12 +45,12 @@ public class EditorEventManagerBase {
             int eventId = e.getID();
             if (eventId == KeyEvent.KEY_PRESSED) {
                 setIsKeyPressed(true);
-                if (e.getKeyCode() == KeyEvent.VK_CONTROL) {
+                if (e.getKeyCode() == CTRL_KEY_CODE) {
                     setIsCtrlDown(true);
                 }
             } else if (eventId == KeyEvent.KEY_RELEASED) {
                 setIsKeyPressed(false);
-                if (e.getKeyCode() == KeyEvent.VK_CONTROL) {
+                if (e.getKeyCode() == CTRL_KEY_CODE) {
                     setIsCtrlDown(false);
                     if (getCtrlRange() != null) {
                         getCtrlRange().dispose();

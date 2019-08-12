@@ -204,17 +204,17 @@ shown below.
 ![](resources/images/lsp4intellij-codeactions.gif)  
 
 #### Go to Definition
-Press the `CTRL` key while clicking on a symbol to navigate to its definition. 
+You can use `CTRL+CLICK`(`COMMAND+CLICK` in MacOS) to navigate to its definition.
  
 ![](resources/images/lsp4intellij-gotodef.gif)
 
 #### Goto References / Find Usages
-You can use `CTRL+CLICK` or `SHIFT+ALT+F7` for a symbol to view the list of its references/usages.
+You can use `CTRL+CLICK`(`COMMAND+CLICK` in MacOS) or `SHIFT+ALT+F7` for a symbol to view the list of its references/usages.
  
 ![](resources/images/lsp4intellij-gotoref.gif)
 
 #### Hover Support
-You can hover over an element while pressing the `CTRL` key to view its documentation if available.
+You can hover over an element while pressing the `CTRL`(`COMMAND` in MacOS) key to view its documentation if available.
 
 ![](resources/images/lsp4intellij-hover.gif)
 
@@ -225,7 +225,7 @@ pops up.
 ![](resources/images/lsp4intellij-workspacesymbols.gif)
 
 #### Renaming Support
-Set the courser to the element which needs to renamed and press `CTRL+F6` to trigger the inplace renaming as shown 
+Set the courser to the element which needs to renamed and press `SHIFT+F6` to trigger the in-place renaming as shown
 below.
 
 ![](resources/images/lsp4intellij-renaming.gif)

@@ -23,6 +23,11 @@ intellij {
 dependencies {
     compile group: 'org.eclipse.lsp4j', name: 'org.eclipse.lsp4j', version: '0.6.0'
     compile group: 'com.vladsch.flexmark', name: 'flexmark', version: '0.34.58'
+    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.4'
+    testCompile group: 'junit', name: 'junit', version: '4.11'
+    testCompile group: 'org.mockito', name: 'mockito-all', version: '1.10.19'
+    testCompile group: 'org.powermock', name: 'powermock-api-mockito', version: '1.6.5'
+    testCompile group: 'org.powermock', name: 'powermock-module-junit4', version: '1.6.5'
 }
 
 sourceSets {
