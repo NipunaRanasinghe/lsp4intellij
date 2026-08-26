@@ -83,9 +83,18 @@ public class LSPRenameHandler implements RenameHandler {
         if (elementToRename instanceof PsiNameIdentifierOwner) {
             RenamePsiElementProcessor processor = RenamePsiElementProcessor.forElement(elementToRename);
             if (processor.isInplaceRenameSupported()) {
+                // StartMarkAction (internal) is used deliberately: there's no public API for detecting
+                // an in-flight inplace-rename mark action on an editor. JetBrains' own built-in
+                // inplace-rename handlers rely on this same internal class for a custom handler like
+                // this one; verified against the actual 2024.3 platform jar before concluding there's
+                // no public replacement.
                 StartMarkAction startMarkAction = editor.getUserData(START_MARK_ACTION_KEY);
                 if (startMarkAction == null || (processor.substituteElementToRename(elementToRename, editor)
                         == elementToRename)) {
+                    // Pass here isn't legacy API usage to clean up - it's com.intellij.openapi.util's
+                    // public Pass (not an .impl class), and it's the exact parameter type
+                    // RenamePsiElementProcessorBase.substituteElementToRename requires; there's no
+                    // Consumer-based overload to call instead.
                     processor.substituteElementToRename(elementToRename, editor, new Pass<PsiElement>() {
                         @Override
                         public void pass(PsiElement element) {
@@ -104,6 +113,10 @@ public class LSPRenameHandler implements RenameHandler {
             } else {
                 InplaceRefactoring inplaceRefactoring = editor.getUserData(InplaceRefactoring.INPLACE_RENAMER);
                 if ((inplaceRefactoring instanceof MemberInplaceRenamer)) {
+                    // TemplateManagerImpl (internal) is used deliberately: the public TemplateManager
+                    // exposes getActiveTemplate(Editor) (a Template), not the live TemplateState this
+                    // needs for gotoEnd(true) - no public method returns that. Same "verified, no
+                    // replacement" situation as StartMarkAction above.
                     TemplateState templateState = TemplateManagerImpl
                             .getTemplateState(InjectedLanguageEditorUtil.getTopLevelEditor(editor));
                     if (templateState != null) {

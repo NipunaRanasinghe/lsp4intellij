@@ -20,7 +20,6 @@ import com.intellij.lang.Language;
 import com.intellij.lang.LanguageDocumentation;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
@@ -42,10 +41,8 @@ class LSPQuickDocAction extends ShowQuickDocInfoAction implements DumbAware {
         Editor editor = e.getData(CommonDataKeys.EDITOR);
         VirtualFile file = FileDocumentManager.getInstance().getFile(editor.getDocument());
         Language language = PsiManager.getInstance(editor.getProject()).findFile(file).getLanguage();
-        //Hack for IntelliJ 2018 TODO proper way
         if (LanguageDocumentation.INSTANCE.allForLanguage(language).isEmpty()
-                || (Integer.parseInt(ApplicationInfo.getInstance().getMajorVersion()) > 2017)
-                && language == PlainTextLanguage.INSTANCE) {
+                || language == PlainTextLanguage.INSTANCE) {
             EditorEventManager manager = EditorEventManagerBase.forEditor(editor);
             if (manager != null) {
                 manager.quickDoc(editor);

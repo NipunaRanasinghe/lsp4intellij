@@ -186,6 +186,11 @@ public final class GUIUtils {
             }
         });
         LightweightHint hint = new LightweightHint(textPane);
+        // HintManagerImpl (internal) is used deliberately: the public HintManager has no method that
+        // positions a hint at an arbitrary point with a constraint, accepts these HIDE_BY_* flags, and
+        // returns the created Hint so a caller can dismiss it explicitly later (needed for currentHint
+        // in HoverFeature/SignatureHelpFeature). Verified against the actual 2024.3 platform jar before
+        // concluding there's no public replacement for this specific capability.
         Point p = HintManagerImpl.getHintPosition(hint, editor, editor.xyToLogicalPosition(point), constraint);
         HintManagerImpl.getInstanceImpl().showEditorHint(hint, editor, p, flags, 0, false,
                 HintManagerImpl.createHintHint(editor, p, hint, constraint).setContentActive(false));

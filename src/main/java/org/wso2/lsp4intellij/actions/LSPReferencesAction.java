@@ -98,6 +98,8 @@ public class LSPReferencesAction extends DumbAwareAction {
             JLabel label = new JLabel("No references found");
             label.setBackground(new JBColor(new Color(150, 0, 0), new Color(150, 0, 0)));
             LightweightHint hint = new LightweightHint(label);
+            // HintManagerImpl (internal) is used deliberately here too - see the same note in
+            // GUIUtils.createAndShowEditorHint; no public HintManager method covers this positioning.
             Point p = HintManagerImpl.getHintPosition(hint, editor, position, constraint);
             HintManagerImpl.getInstanceImpl().showEditorHint(hint, editor, p, flags, 0, false,
                     HintManagerImpl.createHintHint(editor, p, hint, constraint).setContentActive(false));
