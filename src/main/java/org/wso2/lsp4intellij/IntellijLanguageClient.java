@@ -57,10 +57,26 @@ import static org.wso2.lsp4intellij.utils.ApplicationUtils.pool;
 import static org.wso2.lsp4intellij.utils.FileUtils.reloadAllEditors;
 import static org.wso2.lsp4intellij.utils.FileUtils.reloadEditors;
 
+/**
+ * The {@link ApplicationComponent}/{@link Disposable} implementation on this class only matters for
+ * consumers still using the legacy {@code <application-components>} registration style documented
+ * in the developer guide's "Appendix: Legacy components-based setup". Consumers following the
+ * current setup (see {@code resources/plugin.xml.example}) register {@code LSPEditorListener},
+ * {@code LSPFileDocumentManagerListener}, {@code VFSListener}, and {@code LSPProjectManagerListener}
+ * declaratively instead, and {@link #initComponent()} never runs for them — {@code applicationService}
+ * registration does not invoke {@link ApplicationComponent} lifecycle methods.
+ */
 public class IntellijLanguageClient implements ApplicationComponent, Disposable {
 
     private static final Logger LOG = Logger.getInstance(IntellijLanguageClient.class);
 
+    /**
+     * @deprecated only runs for consumers still using the legacy {@code <application-components>}
+     * registration style; see the class javadoc. Prefer registering
+     * {@code LSPEditorListener}/{@code LSPFileDocumentManagerListener}/{@code VFSListener}/
+     * {@code LSPProjectManagerListener} declaratively, as {@code resources/plugin.xml.example} does.
+     */
+    @Deprecated
     @Override
     public void initComponent() {
         try {
@@ -376,6 +392,11 @@ public class IntellijLanguageClient implements ApplicationComponent, Disposable 
                 LspApplicationServerRegistry.getInstance().extensionManagerFor(definition.ext.split(",")[0]));
     }
 
+    /**
+     * @deprecated only runs for consumers still using the legacy {@code <application-components>}
+     * registration style; see the class javadoc.
+     */
+    @Deprecated
     @Override
     public void disposeComponent() {
         Disposer.dispose(this);

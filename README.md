@@ -103,10 +103,26 @@ public class MyLspStartup implements ProjectActivity {
 ```xml
 <extensions defaultExtensionNs="com.intellij">
     <postStartupActivity implementation="com.example.MyLspStartup"/>
+
+    <!-- required for file open/close and document-change sync with the language server -->
+    <editorFactoryListener implementation="org.wso2.lsp4intellij.listeners.LSPEditorListener"/>
+    <fileDocumentManagerListener implementation="org.wso2.lsp4intellij.listeners.LSPFileDocumentManagerListener"/>
 </extensions>
+<applicationListeners>
+    <!-- required for file open/close and document-change sync with the language server -->
+    <listener class="org.wso2.lsp4intellij.listeners.VFSListener"
+              topic="com.intellij.openapi.vfs.VirtualFileListener"/>
+    <listener class="org.wso2.lsp4intellij.listeners.LSPProjectManagerListener"
+              topic="com.intellij.openapi.project.ProjectManagerListener"/>
+</applicationListeners>
 ```
 
 > **Note:** On IntelliJ 2024.3+, `PreloadingActivity` is no longer run, so register the server definition from a `ProjectActivity` wired to the `postStartupActivity` extension point.
+
+> **Note:** The four listeners above are the minimum for the server connection and document sync to
+> work at all. Individual features (completion, diagnostics, rename, ...) need their own extension
+> points — see [resources/plugin.xml.example](resources/plugin.xml.example) for the complete
+> descriptor, or the [Developer Guide](docs/developer-guide.md) for a walkthrough.
 
 A green icon in the IDE's bottom-right confirms a successful connection.
 
