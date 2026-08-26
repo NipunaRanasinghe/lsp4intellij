@@ -26,7 +26,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
-import groovy.lang.Tuple3;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DiagnosticTag;
@@ -35,10 +34,10 @@ import org.jetbrains.annotations.Nullable;
 import org.wso2.lsp4intellij.IntellijLanguageClient;
 import org.wso2.lsp4intellij.client.languageserver.ServerStatus;
 import org.wso2.lsp4intellij.client.languageserver.wrapper.LanguageServerWrapper;
-import org.wso2.lsp4intellij.contributors.fixes.LSPCodeActionFix;
 import org.wso2.lsp4intellij.editor.EditorEventManager;
 import org.wso2.lsp4intellij.editor.EditorEventManagerBase;
 import org.wso2.lsp4intellij.features.LspAnnotation;
+import org.wso2.lsp4intellij.features.SilentAnnotation;
 import org.wso2.lsp4intellij.utils.DocumentUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
 
@@ -162,8 +161,8 @@ public class LSPAnnotator extends ExternalAnnotator<LSPAnnotator.AnnotationSourc
         }
         try {
             annotationResult.silentAnnotations.forEach(annotation -> {
-                AnnotationBuilder builder = holder.newSilentAnnotation(annotation.getFirst());
-                builder.range(annotation.getSecond()).withFix(annotation.getThird()).create();
+                AnnotationBuilder builder = holder.newSilentAnnotation(annotation.severity());
+                builder.range(annotation.range()).withFix(annotation.fix()).create();
             });
             annotationResult.annotations.forEach(annotation -> {
                 AnnotationBuilder builder = holder.newAnnotation(annotation.getSeverity(), annotation.getMessage());
@@ -245,10 +244,9 @@ public class LSPAnnotator extends ExternalAnnotator<LSPAnnotator.AnnotationSourc
      */
     static final class AnnotationResult {
         private final List<LspAnnotation> annotations;
-        private final List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations;
+        private final List<SilentAnnotation> silentAnnotations;
 
-        AnnotationResult(List<LspAnnotation> annotations,
-                List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations) {
+        AnnotationResult(List<LspAnnotation> annotations, List<SilentAnnotation> silentAnnotations) {
             this.annotations = annotations;
             this.silentAnnotations = silentAnnotations;
         }

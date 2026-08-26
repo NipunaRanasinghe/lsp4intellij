@@ -17,9 +17,7 @@ package org.wso2.lsp4intellij.features;
 
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.util.TextRange;
-import groovy.lang.Tuple3;
 import junit.framework.TestCase;
-import org.wso2.lsp4intellij.contributors.fixes.LSPCodeActionFix;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,8 +66,7 @@ public class CodeActionFeatureTest extends TestCase {
     public void testSilentAnnotationsIsTheLiveMutableList() {
         assertTrue(feature.getSilentAnnotations().isEmpty());
 
-        Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix> annotation =
-                new Tuple3<>(HighlightSeverity.ERROR, new TextRange(0, 1), null);
+        SilentAnnotation annotation = new SilentAnnotation(HighlightSeverity.ERROR, new TextRange(0, 1), null);
         feature.getSilentAnnotations().add(annotation);
 
         // The same live list, not a defensive copy: documentChanged() clears the feature's

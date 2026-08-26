@@ -26,7 +26,6 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.util.ui.UIUtil;
-import groovy.lang.Tuple2;
 import org.eclipse.lsp4j.ApplyWorkspaceEditParams;
 import org.eclipse.lsp4j.ApplyWorkspaceEditResponse;
 import org.eclipse.lsp4j.ConfigurationParams;
@@ -74,7 +73,18 @@ public class DefaultLanguageClient implements LanguageClient {
     @NotNull
     private final ClientContext context;
     protected boolean isModal = false;
-    private final HashMap<String, Tuple2<String, String>> progressNotificationItems = new HashMap<>();
+    private final HashMap<String, ProgressNotificationItem> progressNotificationItems = new HashMap<>();
+
+    /**
+     * The title and message last shown for one {@code $/progress} token. Replaces
+     * {@code groovy.lang.Tuple2<String, String>}, which carried the same two values by position
+     * instead of by name.
+     *
+     * @param title the progress notification's title
+     * @param message the progress notification's message
+     */
+    private record ProgressNotificationItem(String title, String message) {
+    }
 
     public DefaultLanguageClient(@NotNull ClientContext context) {
         this.context = context;
@@ -311,7 +321,8 @@ public class DefaultLanguageClient implements LanguageClient {
         } else {
             return null;
         }
-        Tuple2<String, String> progressNotificationItem = new Tuple2<>("LSP Progress Notification", "");
+        ProgressNotificationItem progressNotificationItem =
+                new ProgressNotificationItem("LSP Progress Notification", "");
         progressNotificationItems.put(token, progressNotificationItem);
         return CompletableFuture.completedFuture(null);
     }
@@ -329,13 +340,13 @@ public class DefaultLanguageClient implements LanguageClient {
         } else {
             return;
         }
-        String title = progressNotificationItems.get(token).getFirst();
-        String message = progressNotificationItems.get(token).getSecond();
+        String title = progressNotificationItems.get(token).title();
+        String message = progressNotificationItems.get(token).message();
         WorkDoneProgressNotification progressNotification = params.getValue().getLeft();
         if (progressNotification instanceof WorkDoneProgressBegin) {
             title = ((WorkDoneProgressBegin) progressNotification).getTitle();
             message = ((WorkDoneProgressBegin) progressNotification).getMessage();
-            Tuple2<String, String> progressNotificationItem = new Tuple2<>(title, message);
+            ProgressNotificationItem progressNotificationItem = new ProgressNotificationItem(title, message);
             if (progressNotificationItems.containsKey(token)) {
                 progressNotificationItems.replace(token, progressNotificationItem);
             } else {
@@ -344,12 +355,12 @@ public class DefaultLanguageClient implements LanguageClient {
         } else if (progressNotification instanceof WorkDoneProgressReport) {
             message = ((WorkDoneProgressReport) progressNotification).getMessage();
             if (progressNotificationItems.containsKey(token)) {
-                title = progressNotificationItems.get(token).getFirst();
+                title = progressNotificationItems.get(token).title();
             }
         } else if (progressNotification instanceof WorkDoneProgressEnd) {
             message = ((WorkDoneProgressEnd) progressNotification).getMessage();
             if (progressNotificationItems.containsKey(token)) {
-                title = progressNotificationItems.get(token).getFirst();
+                title = progressNotificationItems.get(token).title();
             }
         }
         String extension = null;

@@ -18,7 +18,6 @@ package org.wso2.lsp4intellij.features;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.util.TextRange;
-import groovy.lang.Tuple3;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.CodeActionContext;
 import org.eclipse.lsp4j.CodeActionParams;
@@ -72,7 +71,7 @@ public final class CodeActionFeature {
     private boolean hasAnnotated;
     private volatile boolean codeActionSyncRequired = false;
     private boolean isTriggerIntentionActions = false;
-    private final List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations = new ArrayList<>();
+    private final List<SilentAnnotation> silentAnnotations = new ArrayList<>();
 
     public CodeActionFeature(Editor editor, LanguageServerWrapper wrapper, TextDocumentIdentifier identifier,
             DiagnosticsFeature diagnosticsFeature, CodeActionOverrides overrides) {
@@ -269,17 +268,16 @@ public final class CodeActionFeature {
                         CodeAction finalCodeAction = codeAction;
                         boolean found = silentAnnotations.stream()
                                 .anyMatch(silentAnnotation ->
-                                        silentAnnotation.getSecond().getStartOffset() == startOffset &&
-                                        silentAnnotation.getSecond().getEndOffset() == endOffset &&
-                                        silentAnnotation.getThird().getText().equals(finalCodeAction.getTitle())
+                                        silentAnnotation.range().getStartOffset() == startOffset &&
+                                        silentAnnotation.range().getEndOffset() == endOffset &&
+                                        silentAnnotation.fix().getText().equals(finalCodeAction.getTitle())
                                  );
                         if (!found) {
-                            Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix> sAnnotation =
-                                    new Tuple3<>(
-                                            HighlightSeverity.INFORMATION,
-                                            range,
-                                            new LSPCodeActionFix(FileUtils.editorToURIString(editor), codeAction)
-                                    );
+                            SilentAnnotation sAnnotation = new SilentAnnotation(
+                                    HighlightSeverity.INFORMATION,
+                                    range,
+                                    new LSPCodeActionFix(FileUtils.editorToURIString(editor), codeAction)
+                            );
                             silentAnnotations.add(sAnnotation);
                             isTriggerIntentionActions = true;
                         }
@@ -294,7 +292,7 @@ public final class CodeActionFeature {
         }
     }
 
-    public List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> getSilentAnnotations() {
+    public List<SilentAnnotation> getSilentAnnotations() {
         return silentAnnotations;
     }
 

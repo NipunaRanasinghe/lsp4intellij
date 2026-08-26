@@ -19,7 +19,6 @@ import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageDocumentation;
-import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.diagnostic.Logger;
@@ -40,13 +39,11 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileTypes.PlainTextLanguage;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.ui.Hint;
-import groovy.lang.Tuple3;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.lsp4j.CodeAction;
 import org.eclipse.lsp4j.Command;
@@ -68,7 +65,6 @@ import org.wso2.lsp4intellij.actions.LSPReferencesAction;
 import org.wso2.lsp4intellij.client.languageserver.ServerOptions;
 import org.wso2.lsp4intellij.client.languageserver.requestmanager.RequestManager;
 import org.wso2.lsp4intellij.client.languageserver.wrapper.LanguageServerWrapper;
-import org.wso2.lsp4intellij.contributors.fixes.LSPCodeActionFix;
 import org.wso2.lsp4intellij.features.CodeActionFeature;
 import org.wso2.lsp4intellij.features.CodeActionOverrides;
 import org.wso2.lsp4intellij.features.CompletionFeature;
@@ -81,6 +77,7 @@ import org.wso2.lsp4intellij.features.NavigationFeature;
 import org.wso2.lsp4intellij.features.ReferenceLookup;
 import org.wso2.lsp4intellij.features.RenameFeature;
 import org.wso2.lsp4intellij.features.SignatureHelpFeature;
+import org.wso2.lsp4intellij.features.SilentAnnotation;
 import org.wso2.lsp4intellij.listeners.LSPCaretListenerImpl;
 import org.wso2.lsp4intellij.utils.DocumentUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
@@ -856,7 +853,7 @@ public class EditorEventManager implements CompletionOverrides, CodeActionOverri
         codeActionFeature.requestAndShowCodeActions();
     }
 
-    public List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> getSilentAnnotations() {
+    public List<SilentAnnotation> getSilentAnnotations() {
         return codeActionFeature.getSilentAnnotations();
     }
 
