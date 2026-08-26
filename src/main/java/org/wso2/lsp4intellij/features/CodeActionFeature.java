@@ -15,8 +15,6 @@
  */
 package org.wso2.lsp4intellij.features;
 
-import com.intellij.lang.annotation.Annotation;
-import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.util.TextRange;
@@ -70,8 +68,8 @@ public final class CodeActionFeature {
     private final DiagnosticsFeature diagnosticsFeature;
     private final CodeActionOverrides overrides;
 
-    private List<Annotation> annotations = new ArrayList<>();
-    private AnnotationHolder anonHolder;
+    private List<LspAnnotation> annotations = new ArrayList<>();
+    private boolean hasAnnotated;
     private volatile boolean codeActionSyncRequired = false;
     private boolean isTriggerIntentionActions = false;
     private final List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations = new ArrayList<>();
@@ -88,17 +86,22 @@ public final class CodeActionFeature {
     /**
      * @return The current diagnostic annotations
      */
-    public synchronized List<Annotation> getAnnotations() {
+    public synchronized List<LspAnnotation> getAnnotations() {
         this.codeActionSyncRequired = false;
         return this.annotations;
     }
 
-    public synchronized void setAnnotations(List<Annotation> annotations) {
+    public synchronized void setAnnotations(List<LspAnnotation> annotations) {
         this.annotations = annotations;
     }
 
-    public synchronized void setAnonHolder(AnnotationHolder holder) {
-        this.anonHolder = holder;
+    /**
+     * Records that {@code LSPAnnotator} has rendered at least one annotation pass for this editor.
+     * Replaces a retained {@code AnnotationHolder} reference the annotator used to hand back here —
+     * only ever null-checked below, never called into, so a flag is all this needs.
+     */
+    public synchronized void markAnnotated() {
+        this.hasAnnotated = true;
     }
 
     public synchronized boolean isCodeActionSyncRequired() {
@@ -212,8 +215,8 @@ public final class CodeActionFeature {
         codeActions.forEach(element -> {
                 if (element.isLeft()) {
                     Command command = element.getLeft();
-                    Annotation annotWithCodeAction = null;
-                    for (Annotation annotation : annotations) {
+                    LspAnnotation annotWithCodeAction = null;
+                    for (LspAnnotation annotation : annotations) {
                         int start = annotation.getStartOffset();
                         int end = annotation.getEndOffset();
                         if (start <= caretPos && end >= caretPos) {
@@ -234,8 +237,8 @@ public final class CodeActionFeature {
                 } else if (element.isRight()) {
                     CodeAction codeAction = element.getRight();
                     List<Diagnostic> diagnosticContext = codeAction.getDiagnostics();
-                    Annotation annotWithCodeAction = null;
-                    for (Annotation annotation : annotations) {
+                    LspAnnotation annotWithCodeAction = null;
+                    for (LspAnnotation annotation : annotations) {
                         int start = annotation.getStartOffset();
                         int end = annotation.getEndOffset();
                         if (start <= caretPos && end >= caretPos) {
@@ -257,7 +260,7 @@ public final class CodeActionFeature {
                     // If the code actions does not have a diagnostics context, creates an intention action for
                     // the current line.
                     if ((diagnosticContext == null || diagnosticContext.isEmpty())
-                            && anonHolder != null && !codeActionSyncRequired) {
+                            && hasAnnotated && !codeActionSyncRequired) {
                         // Calculates text range of the current line.
                         int line = editor.getCaretModel().getCurrentCaret().getLogicalPosition().line;
                         int startOffset = editor.getDocument().getLineStartOffset(line);

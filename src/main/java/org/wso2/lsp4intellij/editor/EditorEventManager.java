@@ -19,8 +19,6 @@ import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageDocumentation;
-import com.intellij.lang.annotation.Annotation;
-import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.command.CommandProcessor;
@@ -78,6 +76,7 @@ import org.wso2.lsp4intellij.features.CompletionOverrides;
 import org.wso2.lsp4intellij.features.DiagnosticsFeature;
 import org.wso2.lsp4intellij.features.FormattingFeature;
 import org.wso2.lsp4intellij.features.HoverFeature;
+import org.wso2.lsp4intellij.features.LspAnnotation;
 import org.wso2.lsp4intellij.features.NavigationFeature;
 import org.wso2.lsp4intellij.features.ReferenceLookup;
 import org.wso2.lsp4intellij.features.RenameFeature;
@@ -374,16 +373,16 @@ public class EditorEventManager implements CompletionOverrides, CodeActionOverri
     /**
      * @return The current diagnostic annotations
      */
-    public List<Annotation> getAnnotations() {
+    public List<LspAnnotation> getAnnotations() {
         return codeActionFeature.getAnnotations();
     }
 
-    public void setAnnotations(List<Annotation> annotations) {
+    public void setAnnotations(List<LspAnnotation> annotations) {
         codeActionFeature.setAnnotations(annotations);
     }
 
-    public void setAnonHolder(AnnotationHolder holder) {
-        codeActionFeature.setAnonHolder(holder);
+    public void markAnnotated() {
+        codeActionFeature.markAnnotated();
     }
 
     public boolean isDiagnosticSyncRequired() {

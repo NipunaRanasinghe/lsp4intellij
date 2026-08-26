@@ -16,17 +16,16 @@
 package org.wso2.lsp4intellij.contributors.annotator;
 
 import com.intellij.codeInspection.ProblemHighlightType;
-import com.intellij.lang.annotation.Annotation;
 import com.intellij.lang.annotation.AnnotationBuilder;
 import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.ExternalAnnotator;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
-import com.intellij.util.SmartList;
 import groovy.lang.Tuple3;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
@@ -39,20 +38,42 @@ import org.wso2.lsp4intellij.client.languageserver.wrapper.LanguageServerWrapper
 import org.wso2.lsp4intellij.contributors.fixes.LSPCodeActionFix;
 import org.wso2.lsp4intellij.editor.EditorEventManager;
 import org.wso2.lsp4intellij.editor.EditorEventManagerBase;
+import org.wso2.lsp4intellij.features.LspAnnotation;
 import org.wso2.lsp4intellij.utils.DocumentUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
-public class LSPAnnotator extends ExternalAnnotator<Object, Object> {
+/**
+ * Renders LSP diagnostics, and the code-action quick fixes later attached to them, as IntelliJ
+ * annotations.
+ *
+ * <p>Per the {@link ExternalAnnotator} threading contract, {@code collectInformation} runs on the
+ * EDT and should only gather immutable inputs, {@code doAnnotate} runs on a background thread and
+ * does the actual work, and {@code apply} runs on the EDT again and should do nothing but paint
+ * {@code doAnnotate}'s result. This class used to violate that: {@code collectInformation}/
+ * {@code doAnnotate} only ran validation checks and discarded their results, and {@code apply} redid
+ * those checks and all the real diagnostic/annotation logic itself. Now {@code doAnnotate} looks up
+ * the current diagnostics (or the cached replay data — see below) and converts either into plain
+ * {@link LspAnnotation} records; {@code apply} only turns those records into
+ * {@link AnnotationBuilder} calls.
+ *
+ * <p>Code actions arrive asynchronously, after the diagnostic annotations they attach a quick fix to
+ * are already rendered — {@code CodeActionFeature.requestAndShowCodeActions()} mutates the matching
+ * cached {@link LspAnnotation} in place and forces a new annotation pass, which this class then
+ * replays (rebuilding a fresh {@link AnnotationBuilder} from the mutated cache) instead of
+ * reconverting diagnostics again. {@link LspAnnotation} exists to make that possible without the
+ * deprecated {@code com.intellij.lang.annotation.Annotation} type or the
+ * {@code (SmartList<Annotation>) holder} cast the old code used to retrieve one back out of a holder.
+ */
+public class LSPAnnotator extends ExternalAnnotator<LSPAnnotator.AnnotationSource, LSPAnnotator.AnnotationResult> {
 
     private static final Logger LOG = Logger.getInstance(LSPAnnotator.class);
-    private static final Object RESULT = new Object();
     private static final Map<DiagnosticSeverity, HighlightSeverity> annotationsMap = new HashMap<>();
 
     static {
@@ -69,8 +90,7 @@ public class LSPAnnotator extends ExternalAnnotator<Object, Object> {
 
     @Nullable
     @Override
-    public Object collectInformation(@NotNull PsiFile file, @NotNull Editor editor, boolean hasErrors) {
-
+    public AnnotationSource collectInformation(@NotNull PsiFile file, @NotNull Editor editor, boolean hasErrors) {
         try {
             VirtualFile virtualFile = file.getVirtualFile();
 
@@ -78,13 +98,11 @@ public class LSPAnnotator extends ExternalAnnotator<Object, Object> {
             if (!FileUtils.isFileSupported(virtualFile) || !IntellijLanguageClient.isExtensionSupported(virtualFile)) {
                 return null;
             }
-            EditorEventManager eventManager = EditorEventManagerBase.forEditor(editor);
-
-            if (eventManager == null) {
+            if (EditorEventManagerBase.forEditor(editor) == null) {
                 return null;
             }
 
-            return RESULT;
+            return new AnnotationSource(virtualFile, file.getProject());
         } catch (Exception e) {
             return null;
         }
@@ -92,96 +110,108 @@ public class LSPAnnotator extends ExternalAnnotator<Object, Object> {
 
     @Nullable
     @Override
-    public Object doAnnotate(Object collectedInfo) {
-        return RESULT;
+    public AnnotationResult doAnnotate(AnnotationSource source) {
+        LanguageServerWrapper languageServerWrapper =
+                LanguageServerWrapper.forVirtualFile(source.virtualFile, source.project);
+        if (languageServerWrapper == null || languageServerWrapper.getStatus() != ServerStatus.INITIALIZED) {
+            return null;
+        }
+        if (!FileUtils.isFileSupported(source.virtualFile)
+                || !IntellijLanguageClient.isExtensionSupported(source.virtualFile)) {
+            return null;
+        }
+
+        String uri = FileUtils.vfsToUri(source.virtualFile);
+        // TODO annotations are applied to a file / document not to an editor.
+        // so store them by file and not by editor..
+        EditorEventManager eventManager = EditorEventManagerBase.forUri(uri);
+        if (eventManager == null) {
+            return null;
+        }
+
+        if (eventManager.isDiagnosticSyncRequired()) {
+            List<LspAnnotation> annotations = null;
+            try {
+                annotations = computeAnnotations(eventManager);
+            } catch (ConcurrentModificationException e) {
+                // Todo - Add proper fix to handle concurrent modifications gracefully.
+                LOG.warn("Error occurred when computing LSP diagnostic annotations due to concurrent "
+                        + "modifications.", e);
+            } catch (Throwable t) {
+                LOG.warn("Error occurred when computing LSP diagnostic annotations.", t);
+            }
+            if (annotations != null) {
+                eventManager.setAnnotations(annotations);
+                eventManager.markAnnotated();
+            }
+            // Requesting code actions doesn't need the annotation holder, so it can fire from here
+            // instead of waiting for apply(); this is the same fire-and-forget async request as before.
+            eventManager.requestAndShowCodeActions();
+            return annotations == null ? null : new AnnotationResult(annotations, Collections.emptyList());
+        } else {
+            eventManager.triggerIntentionActions();
+            return new AnnotationResult(eventManager.getAnnotations(), eventManager.getSilentAnnotations());
+        }
     }
 
     @Override
-    public void apply(@NotNull PsiFile file, Object annotationResult, @NotNull AnnotationHolder holder) {
-
-        LanguageServerWrapper languageServerWrapper = LanguageServerWrapper
-                .forVirtualFile(file.getVirtualFile(), file.getProject());
-        if (languageServerWrapper == null || languageServerWrapper.getStatus() != ServerStatus.INITIALIZED) {
+    public void apply(@NotNull PsiFile file, @Nullable AnnotationResult annotationResult,
+            @NotNull AnnotationHolder holder) {
+        if (annotationResult == null) {
             return;
         }
-
-        VirtualFile virtualFile = file.getVirtualFile();
-        if (FileUtils.isFileSupported(virtualFile) && IntellijLanguageClient.isExtensionSupported(virtualFile)) {
-            String uri = FileUtils.vfsToUri(virtualFile);
-            // TODO annotations are applied to a file / document not to an editor.
-            // so store them by file and not by editor..
-            EditorEventManager eventManager = EditorEventManagerBase.forUri(uri);
-
-            if (Objects.nonNull(eventManager) && eventManager.isDiagnosticSyncRequired()) {
-                try {
-                    createAnnotations(holder, eventManager);
-                } catch (ConcurrentModificationException e) {
-                    // Todo - Add proper fix to handle concurrent modifications gracefully.
-                    LOG.warn("Error occurred when updating LSP code actions due to concurrent modifications.", e);
-                } catch (Throwable t) {
-                    LOG.warn("Error occurred when updating LSP code actions.", t);
+        try {
+            annotationResult.silentAnnotations.forEach(annotation -> {
+                AnnotationBuilder builder = holder.newSilentAnnotation(annotation.getFirst());
+                builder.range(annotation.getSecond()).withFix(annotation.getThird()).create();
+            });
+            annotationResult.annotations.forEach(annotation -> {
+                AnnotationBuilder builder = holder.newAnnotation(annotation.getSeverity(), annotation.getMessage());
+                if (annotation.getHighlightType() != null) {
+                    builder = builder.highlightType(annotation.getHighlightType());
                 }
-                eventManager.requestAndShowCodeActions();
-            } else {
-                try {
-                    updateSilentAnnotations(holder, eventManager);
-                    updateAnnotations(holder, eventManager);
-                } catch (ConcurrentModificationException e) {
-                    // Todo - Add proper fix to handle concurrent modifications gracefully.
-                    LOG.warn("Error occurred when updating LSP diagnostics due to concurrent modifications.", e);
-                } catch (Throwable t) {
-                    LOG.warn("Error occurred when updating LSP diagnostics.", t);
+                List<LspAnnotation.QuickFix> quickFixes = annotation.getQuickFixes();
+                if (quickFixes.isEmpty()) {
+                    builder.range(new TextRange(annotation.getStartOffset(), annotation.getEndOffset())).create();
+                    return;
                 }
-            }
+                boolean firstFix = true;
+                for (LspAnnotation.QuickFix quickFix : quickFixes) {
+                    if (firstFix) {
+                        builder = builder.range(quickFix.getRange());
+                        firstFix = false;
+                    }
+                    builder = builder.withFix(quickFix.getFix());
+                }
+                builder.create();
+            });
+        } catch (ConcurrentModificationException e) {
+            // Todo - Add proper fix to handle concurrent modifications gracefully.
+            LOG.warn("Error occurred when rendering LSP diagnostics due to concurrent modifications.", e);
+        } catch (Throwable t) {
+            LOG.warn("Error occurred when rendering LSP diagnostics.", t);
         }
     }
 
-    private void updateSilentAnnotations(AnnotationHolder holder, EditorEventManager eventManager) {
-        if (Objects.isNull(holder) || Objects.isNull(eventManager)) {
-            return;
-        }
+    private List<LspAnnotation> computeAnnotations(EditorEventManager eventManager) {
+        final List<Diagnostic> diagnostics = eventManager.getDiagnostics();
+        final Editor editor = eventManager.editor;
 
-        final List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> annotations =
-                eventManager.getSilentAnnotations();
-        if (annotations == null) {
-            return;
-        }
-        annotations.forEach(annotation -> {
-            AnnotationBuilder builder = holder.newSilentAnnotation(annotation.getFirst());
-            builder.range(annotation.getSecond()).withFix(annotation.getThird()).create();
-        });
-    }
-
-    private void updateAnnotations(AnnotationHolder holder, EditorEventManager eventManager) {
-        final List<Annotation> annotations = eventManager.getAnnotations();
-        if (annotations == null) {
-            return;
-        }
-        annotations.forEach(annotation -> {
-            AnnotationBuilder builder = holder.newAnnotation(annotation.getSeverity(), annotation.getMessage());
-
-            if (annotation.getQuickFixes() == null || annotation.getQuickFixes().isEmpty()) {
-                int start = annotation.getStartOffset();
-                int end = annotation.getEndOffset();
-                builder.range(new TextRange(start, end)).create();
-                return;
-            }
-
-            boolean range = true;
-            for (Annotation.QuickFixInfo quickFixInfo : annotation.getQuickFixes()) {
-                if (range) {
-                    builder = builder.range(quickFixInfo.textRange);
-                    range = false;
+        List<LspAnnotation> annotations = new ArrayList<>();
+        diagnostics.forEach(d -> {
+            LspAnnotation annotation = createAnnotation(editor, d);
+            if (annotation != null) {
+                if (d.getTags() != null && d.getTags().contains(DiagnosticTag.Deprecated)) {
+                    annotation.setHighlightType(ProblemHighlightType.LIKE_DEPRECATED);
                 }
-                builder = builder.withFix(quickFixInfo.quickFix);
+                annotations.add(annotation);
             }
-            builder.create();
         });
-        eventManager.triggerIntentionActions();
+        return annotations;
     }
 
     @Nullable
-    protected Annotation createAnnotation(Editor editor, AnnotationHolder holder, Diagnostic diagnostic) {
+    protected LspAnnotation createAnnotation(Editor editor, Diagnostic diagnostic) {
         final int start = DocumentUtils.lspPosToOffset(editor, diagnostic.getRange().getStart());
         final int end = DocumentUtils.lspPosToOffset(editor, diagnostic.getRange().getEnd());
         if (start > end) {
@@ -192,30 +222,35 @@ public class LSPAnnotator extends ExternalAnnotator<Object, Object> {
         HighlightSeverity severity = annotationsMap.getOrDefault(diagnostic.getSeverity(), HighlightSeverity.ERROR);
         String message = diagnostic.getMessage() != null ? diagnostic.getMessage() : "";
 
-        holder.newAnnotation(severity, message)
-                .range(range)
-                .create();
-
-        SmartList<Annotation> asList = (SmartList<Annotation>) holder;
-        return asList.get(asList.size() - 1);
+        return new LspAnnotation(severity, message, range);
     }
 
-    private void createAnnotations(AnnotationHolder holder, EditorEventManager eventManager) {
-        final List<Diagnostic> diagnostics = eventManager.getDiagnostics();
-        final Editor editor = eventManager.editor;
+    /**
+     * What {@link #collectInformation} hands to {@link #doAnnotate} — just enough immutable data to
+     * redo the server/URI lookup on the background thread; {@code doAnnotate} must not touch PSI.
+     */
+    static final class AnnotationSource {
+        private final VirtualFile virtualFile;
+        private final Project project;
 
-        List<Annotation> annotations = new ArrayList<>();
-        diagnostics.forEach(d -> {
-            Annotation annotation = createAnnotation(editor, holder, d);
-            if (annotation != null) {
-                if (d.getTags() != null && d.getTags().contains(DiagnosticTag.Deprecated)) {
-                    annotation.setHighlightType(ProblemHighlightType.LIKE_DEPRECATED);
-                }
-                annotations.add(annotation);
-            }
-        });
+        AnnotationSource(VirtualFile virtualFile, Project project) {
+            this.virtualFile = virtualFile;
+            this.project = project;
+        }
+    }
 
-        eventManager.setAnnotations(annotations);
-        eventManager.setAnonHolder(holder);
+    /**
+     * What {@link #doAnnotate} hands to {@link #apply}: the diagnostic annotations and the silent
+     * (intention-action-only) annotations to paint, precomputed off the EDT.
+     */
+    static final class AnnotationResult {
+        private final List<LspAnnotation> annotations;
+        private final List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations;
+
+        AnnotationResult(List<LspAnnotation> annotations,
+                List<Tuple3<HighlightSeverity, TextRange, LSPCodeActionFix>> silentAnnotations) {
+            this.annotations = annotations;
+            this.silentAnnotations = silentAnnotations;
+        }
     }
 }

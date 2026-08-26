@@ -15,7 +15,6 @@
  */
 package org.wso2.lsp4intellij.features;
 
-import com.intellij.lang.annotation.Annotation;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.util.TextRange;
 import groovy.lang.Tuple3;
@@ -47,7 +46,7 @@ public class CodeActionFeatureTest extends TestCase {
     }
 
     public void testSetAnnotationsThenGetRoundTrips() {
-        List<Annotation> annotations = new ArrayList<>();
+        List<LspAnnotation> annotations = new ArrayList<>();
         feature.setAnnotations(annotations);
 
         assertSame(annotations, feature.getAnnotations());
