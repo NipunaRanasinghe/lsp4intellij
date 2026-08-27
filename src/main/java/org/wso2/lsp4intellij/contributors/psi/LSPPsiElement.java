@@ -23,8 +23,6 @@ import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.fileTypes.PlainTextLanguage;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.KeyWithDefaultValue;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.UserDataHolderBase;
 import com.intellij.psi.ContributedReferenceHost;
@@ -46,23 +44,24 @@ import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.concurrency.AtomicFieldUpdater;
-import com.intellij.util.keyFMap.KeyFMap;
 import org.jetbrains.annotations.NotNull;
 import org.wso2.lsp4intellij.utils.ApplicationUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
 
-import javax.annotation.Nullable;
 import javax.swing.Icon;
 
 /**
  * A simple PsiElement for LSP.
+ *
+ * <p>This is a synthetic element: it has no real AST behind it (see {@link #getNode()}), no children,
+ * and no parent other than its containing file. That's the correct trade-off for a language-agnostic
+ * client with no per-language grammar to build a real PSI tree from, but it means platform features
+ * that walk the PSI tree (structure view, PSI-based inspections/refactorings, tree-based navigation)
+ * will not work against these elements — only the specific LSP-backed features this library implements
+ * (references, rename, go-to-definition) are supported.
  */
-public class LSPPsiElement implements PsiNameIdentifierOwner, NavigatablePsiElement {
+public class LSPPsiElement extends UserDataHolderBase implements PsiNameIdentifierOwner, NavigatablePsiElement {
 
-    private static final Key<KeyFMap> COPYABLE_USER_MAP_KEY = Key.create("COPYABLE_USER_MAP_KEY");
-    private final AtomicFieldUpdater<LSPPsiElement, KeyFMap> updater =
-            AtomicFieldUpdater.forFieldOfType(LSPPsiElement.class, KeyFMap.class);
     private final PsiManager manager;
     private final LSPPsiReference reference;
     private final Project project;
@@ -86,11 +85,6 @@ public class LSPPsiElement implements PsiNameIdentifierOwner, NavigatablePsiElem
         manager = PsiManager.getInstance(project);
         reference = new LSPPsiReference(this);
     }
-
-    /**
-     * Concurrent writes to this field are via CASes only, using the {@link #updater}.
-     */
-    private volatile KeyFMap myUserMap = KeyFMap.EMPTY_MAP;
 
     /**
      * Returns the language of the PSI element.
@@ -615,93 +609,6 @@ public class LSPPsiElement implements PsiNameIdentifierOwner, NavigatablePsiElem
         return this;
     }
 
-    public <T> void putUserData(@NotNull Key<T> key, @Nullable T value) {
-        boolean control = true;
-        while (control) {
-            KeyFMap map = getUserMap();
-            KeyFMap newMap = (value == null) ? map.minus(key) : map.plus(key, value);
-            if ((newMap.equalsByReference(map)) || changeUserMap(map, newMap)) {
-                control = false;
-            }
-        }
-    }
-
-    protected boolean changeUserMap(KeyFMap oldMap, KeyFMap newMap) {
-        return updater.compareAndSet(this, oldMap, newMap);
-    }
-
-    protected KeyFMap getUserMap() {
-        return myUserMap;
-    }
-
-    public <T> T getCopyableUserData(Key<T> key) {
-        KeyFMap map = getUserData(COPYABLE_USER_MAP_KEY);
-        return (map == null) ? null : map.get(key);
-    }
-
-    public <T> T getUserData(@NotNull Key<T> key) {
-        T t = getUserMap().get(key);
-        if (t == null && key instanceof KeyWithDefaultValue) {
-            KeyWithDefaultValue<T> key1 = (KeyWithDefaultValue<T>) key;
-            t = putUserDataIfAbsent(key, key1.getDefaultValue());
-        }
-        return t;
-    }
-
-    public <T> T putUserDataIfAbsent(Key<T> key, T value) {
-        while (true) {
-            KeyFMap map = getUserMap();
-            T oldValue = map.get(key);
-            if (oldValue != null) {
-                return oldValue;
-            }
-            KeyFMap newMap = map.plus(key, value);
-            if ((newMap.equalsByReference(map)) || changeUserMap(map, newMap)) {
-                return value;
-            }
-        }
-    }
-
-    public <T> void putCopyableUserData(Key<T> key, T value) {
-        boolean control = true;
-        while (control) {
-            KeyFMap map = getUserMap();
-            KeyFMap copyableMap = map.get(COPYABLE_USER_MAP_KEY);
-            if (copyableMap == null) {
-                copyableMap = KeyFMap.EMPTY_MAP;
-            }
-            KeyFMap newCopyableMap = (value == null) ? copyableMap.minus(key) : copyableMap.plus(key, value);
-            KeyFMap newMap = (newCopyableMap.isEmpty()) ?
-                    map.minus(COPYABLE_USER_MAP_KEY) :
-                    map.plus(COPYABLE_USER_MAP_KEY, newCopyableMap);
-            if ((newMap.equalsByReference(map)) || changeUserMap(map, newMap)) {
-                control = false;
-            }
-        }
-    }
-
-    public <T> boolean replace(Key<T> key, @Nullable T oldValue, @Nullable T newValue) {
-        while (true) {
-            KeyFMap map = getUserMap();
-            if (map.get(key) != oldValue) {
-                return false;
-            } else {
-                KeyFMap newMap = (newValue == null) ? map.minus(key) : map.plus(key, newValue);
-                if ((newMap == map) || changeUserMap(map, newMap)) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    public void copyCopyableDataTo(UserDataHolderBase clone) {
-        clone.putUserData(COPYABLE_USER_MAP_KEY, getUserData(COPYABLE_USER_MAP_KEY));
-    }
-
-    public boolean isUserDataEmpty() {
-        return getUserMap().isEmpty();
-    }
-
     public ItemPresentation getPresentation() {
         return new ItemPresentation() {
             public String getPresentableText() {
@@ -713,7 +620,7 @@ public class LSPPsiElement implements PsiNameIdentifierOwner, NavigatablePsiElem
             }
 
             public Icon getIcon(boolean unused) {
-                return (unused) ? null : null; //iconProvider.getIcon(LSPPsiElement.this)
+                return null;
             }
         };
     }
@@ -771,13 +678,5 @@ public class LSPPsiElement implements PsiNameIdentifierOwner, NavigatablePsiElem
 
     public boolean canNavigate() {
         return true;
-    }
-
-    protected void clearUserData() {
-        setUserMap(KeyFMap.EMPTY_MAP);
-    }
-
-    protected void setUserMap(KeyFMap map) {
-        myUserMap = map;
     }
 }
