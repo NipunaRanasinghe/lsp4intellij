@@ -66,6 +66,12 @@ see also jetbrains documentation: https://plugins.jetbrains.com/docs/intellij/pl
         <action class="org.wso2.lsp4intellij.actions.LSPReferencesAction" id="LSPFindUsages">
              <keyboard-shortcut first-keystroke="shift alt F7" keymap="$default"/>
         </action>
+
+        <!-- needed for code formatting -->
+        <action class="org.wso2.lsp4intellij.actions.LSPReformatAction" id="ReformatCode"
+                use-shortcut-of="ReformatCode" overrides="true" text="Reformat Code"/>
+        <action class="org.wso2.lsp4intellij.actions.LSPShowReformatDialogAction" id="ShowReformatFileDialog"
+                use-shortcut-of="ShowReformatFileDialog" overrides="true" text="Show Reformat File Dialog"/>
     </actions>
     <applicationListeners>
         <!-- required for lsp file sync -->

@@ -209,73 +209,10 @@ The client exposes the following methods for inspecting and overriding these val
    </application-components>
    ```
 
-2. Add the following extensions to enable individual features:
-
-   - **Code completion** (replace the `language` attribute if you have your own [custom language implementation](https://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/language_and_filetype.html#define-a-language)):
-
-     ```xml
-     <extensions defaultExtensionNs="com.intellij">
-         <completion.contributor implementationClass="org.wso2.lsp4intellij.contributors.LSPCompletionContributor"
-                                 id="LSPCompletionContributor" language="any"/>
-     </extensions>
-     ```
-
-   - **Code formatting:**
-
-     ```xml
-     <actions>
-        <action class="org.wso2.lsp4intellij.actions.LSPReformatAction" id="ReformatCode" use-shortcut-of="ReformatCode"
-                overrides="true" text="Reformat Code"/>
-        <action class="org.wso2.lsp4intellij.actions.LSPShowReformatDialogAction" id="ShowReformatFileDialog"
-                use-shortcut-of="ShowReformatFileDialog" overrides="true" text="Show Reformat File Dialog"/>
-     </actions>
-     ```
-
-   - **Diagnostics and code actions** (replace the `language` attribute if you have your own [custom language implementation](https://www.jetbrains.org/intellij/sdk/docs/tutorials/custom_language_support/language_and_filetype.html#define-a-language)):
-
-     ```xml
-     <extensions defaultExtensionNs="com.intellij">
-        <externalAnnotator id="LSPAnnotator" language="TEXT" implementationClass="org.wso2.lsp4intellij.contributors.annotator.LSPAnnotator"/>
-     </extensions>
-     ```
-
-   - **Find Usages:**
-
-     ```xml
-     <actions>
-         <action class="org.wso2.lsp4intellij.actions.LSPReferencesAction" id="LSPFindUsages">
-              <keyboard-shortcut first-keystroke="shift alt F7" keymap="$default"/>
-         </action>
-     </actions>
-     ```
-
-   - **Workspace symbols:**
-
-     ```xml
-     <extensions defaultExtensionNs="com.intellij">
-         <gotoSymbolContributor implementation="org.wso2.lsp4intellij.contributors.symbol.LSPSymbolContributor"
-                                       id="LSPSymbolContributor"/>
-     </extensions>
-     ```
-
-   - **Renaming Support:**
-
-     ```xml
-     <extensions defaultExtensionNs="com.intellij">
-         <renameHandler implementation="org.wso2.lsp4intellij.contributors.rename.LSPRenameHandler"
-                        id="LSPRenameHandler" order="first"/>
-         <renamePsiElementProcessor implementation="org.wso2.lsp4intellij.contributors.rename.LSPRenameProcessor"
-                                    id="LSPRenameProcessor" order="first"/>
-     </extensions>
-     ```
-
-   - **Signature Help:**
-
-     ```xml
-     <extensions defaultExtensionNs="com.intellij">
-         <typedHandler implementation="org.wso2.lsp4intellij.listeners.LSPTypedHandler"
-                       id="LSPTypedHandler"/>
-     </extensions>
-     ```
-
-> **Note:** No additional configuration is required for the other features.
+2. Add the same feature extensions [resources/plugin.xml.example](../resources/plugin.xml.example)
+   registers — its `<extensions>`, `<actions>`, and `<applicationListeners>` blocks apply unchanged
+   regardless of which way `IntellijLanguageClient` itself is registered (component here, service in
+   the modern setup); only step 1 above differs between the two setup styles. Skip
+   `applicationService`/`postStartupActivity` from that file since step 1 already covers component
+   registration, and initialize your server definitions from wherever your plugin already runs
+   startup code instead.
