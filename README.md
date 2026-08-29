@@ -118,11 +118,13 @@ public class MyLspStartup implements ProjectActivity {
 ```
 
 > **Note:** On IntelliJ 2024.3+, `PreloadingActivity` is no longer run, so register the server definition from a `ProjectActivity` wired to the `postStartupActivity` extension point.
-
-> **Note:** The four listeners above are the minimum for the server connection and document sync to
-> work at all. Individual features (completion, diagnostics, rename, ...) need their own extension
-> points — see [resources/plugin.xml.example](resources/plugin.xml.example) for the complete
-> descriptor, or the [Developer Guide](docs/developer-guide.md) for a walkthrough.
+>
+> **Note:** `LSPEditorListener`, `LSPFileDocumentManagerListener`, and `VFSListener` are the minimum
+> for the server connection and document sync to work at all; `LSPProjectManagerListener` disposes
+> the project's language servers on project close so a stale status widget doesn't linger into the
+> next project opened in the same window. Individual features (completion, diagnostics, rename, ...)
+> need their own extension points — see [resources/plugin.xml.example](resources/plugin.xml.example)
+> for the complete descriptor, or the [Developer Guide](docs/developer-guide.md) for a walkthrough.
 
 A green icon in the IDE's bottom-right confirms a successful connection.
 
