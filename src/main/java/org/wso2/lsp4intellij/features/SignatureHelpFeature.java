@@ -161,7 +161,11 @@ public final class SignatureHelpFeature {
                     builder.append("<code>").append(string).append("</code>");
                 }
                 if (!result.isEmpty()) {
-                    builder.append("<div>").append(String.join("\n", result)).append("</div>");
+                    // "<br/>", not a line-separator character: this joins already-rendered HTML
+                    // fragments (one per parameter's documentation), and a raw newline between two
+                    // HTML blocks is collapsed by the renderer either way - only a real HTML break
+                    // separates them visually, same reasoning as the getLeft() branch above.
+                    builder.append("<div>").append(String.join("<br/>", result)).append("</div>");
                 }
                 builder.append("</html>");
                 invokeLater(() -> hintSetter.accept(createAndShowEditorHint(
@@ -169,7 +173,7 @@ public final class SignatureHelpFeature {
                         HintManager.UNDER, HintManager.HIDE_BY_OTHER_HINT)));
 
             } catch (Exception e) {
-                LOG.warn("Internal error occurred when processing signature help");
+                LOG.warn("Internal error occurred when processing signature help", e);
             }
         });
     }
