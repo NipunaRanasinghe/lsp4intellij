@@ -68,7 +68,8 @@ public class EditorEventManagerBase {
         EditorEventManagerBase.ctrlRange = ctrlRange;
     }
 
-    static synchronized boolean getIsCtrlDown() {
+    // Public: HoverFeature (a different package) also reads this to decide how to show a hover hint.
+    public static synchronized boolean getIsCtrlDown() {
         return isCtrlDown;
     }
 
