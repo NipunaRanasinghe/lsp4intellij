@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.wso2.lsp4intellij.requests.Timeouts.CODEACTION;
 import static org.wso2.lsp4intellij.requests.Timeouts.EXECUTE_COMMAND;
@@ -67,11 +68,18 @@ public final class CodeActionFeature {
     private final DiagnosticsFeature diagnosticsFeature;
     private final CodeActionOverrides overrides;
 
-    private List<LspAnnotation> annotations = new ArrayList<>();
+    // CopyOnWriteArrayList, not ArrayList: LSPAnnotator.apply() iterates these on the daemon's
+    // background annotator thread (ExternalAnnotator.apply() runs under a read action taken on that
+    // thread, never on the EDT), while showCodeActions() below mutates them on the EDT once an async
+    // code-action response arrives - a real cross-thread race, not just same-thread interleaving.
+    // CopyOnWriteArrayList makes a concurrent structural change during iteration impossible to
+    // observe as a ConcurrentModificationException; a reader just sees the list as it was when its
+    // iteration started.
+    private List<LspAnnotation> annotations = new CopyOnWriteArrayList<>();
     private boolean hasAnnotated;
     private volatile boolean codeActionSyncRequired = false;
     private boolean isTriggerIntentionActions = false;
-    private final List<SilentAnnotation> silentAnnotations = new ArrayList<>();
+    private final List<SilentAnnotation> silentAnnotations = new CopyOnWriteArrayList<>();
 
     public CodeActionFeature(Editor editor, LanguageServerWrapper wrapper, TextDocumentIdentifier identifier,
             DiagnosticsFeature diagnosticsFeature, CodeActionOverrides overrides) {
@@ -91,7 +99,7 @@ public final class CodeActionFeature {
     }
 
     public synchronized void setAnnotations(List<LspAnnotation> annotations) {
-        this.annotations = annotations;
+        this.annotations = new CopyOnWriteArrayList<>(annotations);
     }
 
     /**
@@ -208,7 +216,7 @@ public final class CodeActionFeature {
             return;
         }
         if (annotations == null) {
-            annotations = new ArrayList<>();
+            annotations = new CopyOnWriteArrayList<>();
         }
 
         codeActions.forEach(element -> {

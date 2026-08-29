@@ -21,8 +21,8 @@ import com.intellij.lang.annotation.AnnotationBuilder;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.util.TextRange;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * A plain, mutable stand-in for the platform's deprecated {@code com.intellij.lang.annotation.Annotation},
@@ -38,6 +38,15 @@ import java.util.List;
  * {@code (SmartList<Annotation>) holder} cast that used to be needed to retrieve one back out of an
  * {@code AnnotationHolder}. {@code LSPAnnotator} rebuilds a fresh {@link AnnotationBuilder} from these
  * fields on every annotation pass.
+ *
+ * <p>{@code registerFix} runs on the EDT (from {@code CodeActionFeature.showCodeActions()}, once an
+ * async code-action response arrives), while {@code LSPAnnotator.apply()} iterates
+ * {@link #getQuickFixes()} on the daemon's background annotator thread, for a replayed (not freshly
+ * built) annotation — the two are genuinely concurrent, not just interleaved on one thread, since
+ * {@code ExternalAnnotator.apply()} runs under a read action taken on that background thread, not on
+ * the EDT. {@code quickFixes} is a {@link CopyOnWriteArrayList} so that race can't throw
+ * {@code ConcurrentModificationException}: a reader iterates a stable snapshot, and a concurrent
+ * {@code registerFix} is simply visible on the next pass.
  */
 public final class LspAnnotation {
 
@@ -45,7 +54,7 @@ public final class LspAnnotation {
     private final String message;
     private final TextRange range;
     private ProblemHighlightType highlightType;
-    private final List<QuickFix> quickFixes = new ArrayList<>();
+    private final List<QuickFix> quickFixes = new CopyOnWriteArrayList<>();
 
     public LspAnnotation(HighlightSeverity severity, String message, TextRange range) {
         this.severity = severity;

@@ -44,10 +44,16 @@ public class CodeActionFeatureTest extends TestCase {
     }
 
     public void testSetAnnotationsThenGetRoundTrips() {
+        LspAnnotation annotation = new LspAnnotation(HighlightSeverity.ERROR, "message", new TextRange(0, 1));
         List<LspAnnotation> annotations = new ArrayList<>();
+        annotations.add(annotation);
         feature.setAnnotations(annotations);
 
-        assertSame(annotations, feature.getAnnotations());
+        // Not assertSame: setAnnotations wraps the list into a CopyOnWriteArrayList (see the field
+        // comment on CodeActionFeature.annotations for why - LSPAnnotator.apply() and
+        // showCodeActions() touch it from different threads), so the returned list is a different
+        // object with the same contents, not the exact reference passed in.
+        assertEquals(annotations, feature.getAnnotations());
     }
 
     public void testCodeActionSyncNotRequiredInitially() {

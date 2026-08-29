@@ -52,15 +52,16 @@ import java.util.Map;
  * Renders LSP diagnostics, and the code-action quick fixes later attached to them, as IntelliJ
  * annotations.
  *
- * <p>Per the {@link ExternalAnnotator} threading contract, {@code collectInformation} runs on the
- * EDT and should only gather immutable inputs, {@code doAnnotate} runs on a background thread and
- * does the actual work, and {@code apply} runs on the EDT again and should do nothing but paint
- * {@code doAnnotate}'s result. This class used to violate that: {@code collectInformation}/
- * {@code doAnnotate} only ran validation checks and discarded their results, and {@code apply} redid
- * those checks and all the real diagnostic/annotation logic itself. Now {@code doAnnotate} looks up
- * the current diagnostics (or the cached replay data — see below) and converts either into plain
- * {@link LspAnnotation} records; {@code apply} only turns those records into
- * {@link AnnotationBuilder} calls.
+ * <p>Per the {@link ExternalAnnotator} threading contract, {@code collectInformation} and
+ * {@code apply} are called within a read action and should only gather immutable inputs / paint a
+ * precomputed result, respectively; {@code doAnnotate} is called outside a read action and does the
+ * actual work. All three run on the daemon's own background annotator thread, not the EDT — even
+ * {@code apply}, which takes its read action on that same thread rather than switching to the EDT.
+ * This class used to violate the contract: {@code collectInformation}/{@code doAnnotate} only ran
+ * validation checks and discarded their results, and {@code apply} redid those checks and all the
+ * real diagnostic/annotation logic itself. Now {@code doAnnotate} looks up the current diagnostics
+ * (or the cached replay data — see below) and converts either into plain {@link LspAnnotation}
+ * records; {@code apply} only turns those records into {@link AnnotationBuilder} calls.
  *
  * <p>Code actions arrive asynchronously, after the diagnostic annotations they attach a quick fix to
  * are already rendered — {@code CodeActionFeature.requestAndShowCodeActions()} mutates the matching
@@ -240,7 +241,8 @@ public class LSPAnnotator extends ExternalAnnotator<LSPAnnotator.AnnotationSourc
 
     /**
      * What {@link #doAnnotate} hands to {@link #apply}: the diagnostic annotations and the silent
-     * (intention-action-only) annotations to paint, precomputed off the EDT.
+     * (intention-action-only) annotations to paint, precomputed outside the read action {@code apply}
+     * takes.
      */
     static final class AnnotationResult {
         private final List<LspAnnotation> annotations;

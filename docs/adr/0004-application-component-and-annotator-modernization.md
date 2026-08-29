@@ -64,12 +64,17 @@ The actual defect was worse than "business logic runs in `apply` instead of `doA
 shared sentinel `Object`), and `apply` redid an independent copy of the same validation — by a different
 lookup path, URI instead of editor, per the file's own "annotations are applied to a file/document not
 to an editor" comment — plus 100% of the diagnostic-to-annotation conversion and the code-action-request
-kickoff, entirely on the EDT.
+kickoff, all inside the read action `apply` takes.
 
-Restructured so `collectInformation` (EDT) only validates and hands `doAnnotate` an immutable
-`(VirtualFile, Project)` pair; `doAnnotate` (background thread) does the by-URI lookup, decides
-sync-required vs. replay, and converts diagnostics — or reads the cached replay data — into plain
-`org.wso2.lsp4intellij.features.LspAnnotation` records; `apply` (EDT) does nothing but turn those
+Restructured to follow the platform's actual contract terms rather than the informal "EDT vs.
+background thread" framing this ADR originally used — checked against JetBrains' own
+`ExternalAnnotator`/`ExternalToolPass` source: `collectInformation` and `apply` are both called
+*within* a read action, `doAnnotate` is called *outside* one, and all three run on the daemon's own
+background annotator thread — `apply` is never dispatched to the EDT; its read action is taken on
+that same background thread. `collectInformation` now only validates and hands `doAnnotate` an
+immutable `(VirtualFile, Project)` pair; `doAnnotate` does the by-URI lookup, decides sync-required
+vs. replay, and converts diagnostics — or reads the cached replay data — into plain
+`org.wso2.lsp4intellij.features.LspAnnotation` records; `apply` does nothing but turn those
 records into `AnnotationBuilder` calls. `LspAnnotation` replaces `List<Annotation>` as
 `CodeActionFeature`'s cache and removes the `(SmartList<Annotation>) holder` cast the old code used to
 retrieve a just-created `Annotation` back out of a holder — `LSPAnnotator` now rebuilds a fresh builder
@@ -93,6 +98,32 @@ their old types were themselves deprecated or annotator-internal. `LSPAnnotator.
 `(Editor, AnnotationHolder, Diagnostic) -> Annotation` to `(Editor, Diagnostic) -> LspAnnotation` —
 flagged rather than re-confirmed, since it's the same risk category as the change just approved.
 
+### 3. Self-correction: the annotation cache needed real concurrency protection, not just a comment
+
+A review comment on this ADR's first draft ("use `ExternalAnnotator` contract terms instead of thread
+labels") prompted checking the actual `ExternalToolPass` implementation that drives
+`ExternalAnnotator`, rather than trusting the interface javadoc alone — which surfaced that an earlier
+reply on this same PR, dismissing a related CME finding as impossible because "`apply()` and
+`showCodeActions()` are both EDT-confined," was wrong. `apply()`'s read action is taken on the
+background annotator thread itself; it never runs on the EDT. `CodeActionFeature.showCodeActions()`,
+by contrast, genuinely does run on the EDT (dispatched via `invokeLater`). These are two different
+threads, and they can run concurrently — so a structural mutation (`registerFix`, or
+`showCodeActions`'s own reordering of the `annotations` list) racing against `apply`'s iteration is a
+real `ConcurrentModificationException` risk, not a false alarm.
+
+This race, and its mitigation (catch `ConcurrentModificationException`, log, skip painting that pass),
+both predate this phase — the deprecated `Annotation`-based design had the identical two-thread
+interleaving. Fixed anyway rather than deferred, since the fix is small and contained:
+`CodeActionFeature.annotations`/`silentAnnotations` and `LspAnnotation.quickFixes` are now
+`CopyOnWriteArrayList`s instead of plain `ArrayList`s. A `CopyOnWriteArrayList`'s iterator reflects a
+fixed snapshot taken when the iteration starts; a concurrent `add`/`remove` on the same list from
+another thread can no longer throw `ConcurrentModificationException` for that iteration — it's simply
+not visible until the next pass, which is the existing eventually-consistent design (a code-action
+attach already forces a new `DaemonCodeAnalyzer` pass to make itself visible). `setAnnotations`
+wraps whatever list it's given into a fresh `CopyOnWriteArrayList`, so the field's concrete type is
+guaranteed regardless of caller; this breaks `CodeActionFeatureTest`'s reference-identity assertion,
+now checking content equality instead.
+
 ## Consequences
 
 - No public method signature changed except the two narrow, user-confirmed cases in point 2
@@ -106,6 +137,10 @@ flagged rather than re-confirmed, since it's the same risk category as the chang
 - Two behavior changes to `LSPAnnotator` ship as a side effect of removing the deprecated `Annotation`
   API, not as independently requested fixes: deprecated-diagnostic strikethrough styling now survives
   replay passes; a diagnostics-computation failure no longer leaves a partial paint.
+- `CodeActionFeature.getAnnotations()` no longer returns the exact list reference passed to
+  `setAnnotations()` — it returns the field's `CopyOnWriteArrayList`, a different object with the same
+  contents. `getSilentAnnotations()` is unaffected: that field was never re-assigned through a setter,
+  so switching its concrete type to `CopyOnWriteArrayList` didn't change its identity contract.
 
 ## Rules for new code
 
@@ -119,6 +154,11 @@ flagged rather than re-confirmed, since it's the same risk category as the chang
 3. When a class needs a mutable, pre-render cache entry that a later async response can attach data to
    (the annotation-then-quick-fix pattern here), use a plain data class, not the deprecated `Annotation`
    type or a reflection-based holder cast.
-4. Same as [[0003-feature-layer-decomposition]] rule 5: preserve exact behavior when restructuring
+4. `ExternalAnnotator.apply()` runs on the daemon's background annotator thread, under a read action
+   taken on that thread — never on the EDT. Any state `apply()` reads that another, genuinely
+   EDT-dispatched (`invokeLater`) code path can mutate needs real concurrency protection (a
+   `CopyOnWriteArrayList`, a lock, or an immutable snapshot on handoff) — not an assumption that both
+   sides are "on the UI thread, just at different times."
+5. Same as [[0003-feature-layer-decomposition]] rule 5: preserve exact behavior when restructuring
    code; a bug fix or behavior change forced by the restructuring is a separate, explicitly called-out
    decision, not a silent side effect.
