@@ -890,7 +890,7 @@ public class EditorEventManager implements CompletionOverrides, CodeActionOverri
 
         @Override
         public int compareTo(@NotNull LSPTextEdit te) {
-            return te.getStartOffset() - getStartOffset();
+            return Integer.compare(te.getStartOffset(), getStartOffset());
         }
     }
 
