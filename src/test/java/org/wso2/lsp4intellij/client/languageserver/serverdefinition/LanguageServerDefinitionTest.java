@@ -268,4 +268,49 @@ public class LanguageServerDefinitionTest {
         Assert.assertThrows(UnsupportedOperationException.class,
                 () -> raw.createConnectionProvider("/work"));
     }
+
+    /**
+     * Verifies that {@link LanguageServerDefinition#getDisplayName()} falls back to the extension,
+     * rendering a multi-extension definition as a comma separated list.
+     */
+    @Test
+    public void displayNameDefaultsToExt() {
+        Assert.assertEquals("go", new TestableDefinition("go").getDisplayName());
+        Assert.assertEquals("bal, balx", new TestableDefinition("bal,balx").getDisplayName());
+    }
+
+    /**
+     * Verifies that a definition with no extension still yields a usable label rather than null or
+     * an empty string, since the UI has no other name to show.
+     */
+    @Test
+    public void displayNameFallsBackWhenExtMissing() {
+        Assert.assertEquals("Language server", new TestableDefinition("").getDisplayName());
+        Assert.assertEquals("Language server", new TestableDefinition(null).getDisplayName());
+    }
+
+    /**
+     * Verifies that {@link LanguageServerDefinition#withDisplayName(String)} overrides the
+     * extension-derived default and returns the same definition, so it can be chained at the point
+     * of registration.
+     */
+    @Test
+    public void withDisplayNameOverridesDefaultAndChains() {
+        TestableDefinition def = new TestableDefinition("bal");
+        Assert.assertSame(def, def.withDisplayName("Ballerina"));
+        Assert.assertEquals("Ballerina", def.getDisplayName());
+    }
+
+    /**
+     * Verifies that clearing the name restores the extension-derived default.
+     */
+    @Test
+    public void withDisplayNameClearedRestoresDefault() {
+        TestableDefinition def = new TestableDefinition("bal");
+        def.withDisplayName("Ballerina");
+        def.withDisplayName(null);
+        Assert.assertEquals("bal", def.getDisplayName());
+        def.withDisplayName("");
+        Assert.assertEquals("bal", def.getDisplayName());
+    }
 }

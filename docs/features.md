@@ -19,6 +19,7 @@ LSP4IntelliJ surfaces these LSP capabilities in JetBrains IDEs.
 - [Hover Support](#hover-support)
 - [Workspace Symbols](#workspace-symbols)
 - [Renaming Support](#renaming-support)
+- [LSP Inspector](#lsp-inspector)
 - [Work in progress](#work-in-progress)
 
 <!-- tocstop -->
@@ -82,6 +83,27 @@ Click **Navigate** in the top menu, then **Symbol…**, and enter the name of th
 Place the cursor on the element to rename and press `Shift+F6` to trigger in-place renaming.
 
 ![In-place rename of a symbol triggered with Shift+F6](../resources/images/lsp4intellij-renaming.gif)
+
+## LSP Inspector
+
+Open **View → Tool Windows → LSP Inspector**, or click the language server icon in the status bar and choose **Open LSP Inspector**. If the project runs more than one language server, pick one from the dropdown at the left of the toolbar.
+
+![The LSP Inspector's Log tab showing the server's status changes and traced JSON-RPC messages](../resources/images/lsp4intellij-inspector-log.png)
+
+- **Log** shows the server's status changes, crashes, and the log and show-message notifications it sends. Use the level and source dropdowns to filter it; **Error** shows only crashes, error messages, and failed requests.
+- To see JSON-RPC traffic, set **Trace** to `MESSAGES` (method, id and direction of each message) or `VERBOSE` (the full payload as well). Each response shows the method of the request it answers and how long the server took, for example `textDocument/hover (12) 38 ms`. Tracing is `OFF` by default and is set per server.
+- **Server Info** shows the server's status, the name and version it reports, its trace level, document sync mode and recent crash count, and its definition (the launch command), with **Copy** and **Restart** buttons. Next to it, **Capabilities** lists the 17 requests LSP4IntelliJ sends, grouped into Editing, Navigation and Formatting, and marks each one the server did not advertise in its `initialize` response. Hover a capability to see its LSP method; select **Unsupported only** to list just the ones the server lacks. If rename or formatting does nothing, check here first.
+
+  ![The Server Info tab showing the server's details and which capabilities it advertises](../resources/images/lsp4intellij-inspector-server-info.png)
+- **Requests** shows the requests waiting for a response, with how long each has waited, and the response times per method: count, errors, median, 95th percentile and maximum. Click a column header to sort by it. Times of 300 ms or more are shown in amber and 1 s or more in red. Response times are recorded whether or not tracing is on.
+
+  ![The Requests tab showing response times per method](../resources/images/lsp4intellij-inspector-requests.png)
+- **Timeouts** shows, per request type, how many requests got a response within their timeout and how many timed out.
+- **Connected Files** lists the files currently open on the server, with their folders. Double-click a file, or select it and press Enter, to open it in the editor.
+
+**Clear** empties the selected server's log, **Export Log** saves it to a file, and **Scroll to End** jumps to the newest entry. The exported file starts with the Server Info details and capabilities, followed by the log with the current level and source filters applied, so it can be attached to a bug report.
+
+> **Note:** The tool window appears only if the plugin using LSP4IntelliJ registers it. See [LSP Inspector](../README.md#lsp-inspector) in the README.
 
 ---
 

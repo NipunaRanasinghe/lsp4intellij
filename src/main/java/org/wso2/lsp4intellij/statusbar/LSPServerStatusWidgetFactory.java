@@ -23,12 +23,7 @@ import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class LSPServerStatusWidgetFactory implements StatusBarWidgetFactory {
-    private final Map<Project, LSPServerStatusWidget> widgetForProject = new HashMap<>();
-
     @Override
     public @NonNls
     @NotNull
@@ -50,22 +45,11 @@ public class LSPServerStatusWidgetFactory implements StatusBarWidgetFactory {
 
     @Override
     public @NotNull StatusBarWidget createWidget(@NotNull Project project) {
-        return widgetForProject.computeIfAbsent(project, (k) -> new LSPServerStatusWidget(project));
-    }
-
-    @Override
-    public void disposeWidget(@NotNull StatusBarWidget statusBarWidget) {
-        if (statusBarWidget instanceof LSPServerStatusWidget) {
-            widgetForProject.remove(((LSPServerStatusWidget) statusBarWidget).getProject());
-        }
+        return new LSPServerStatusWidget(project);
     }
 
     @Override
     public boolean canBeEnabledOn(@NotNull StatusBar statusBar) {
         return true;
-    }
-
-    public LSPServerStatusWidget getWidget(Project project) {
-        return widgetForProject.get(project);
     }
 }

@@ -19,6 +19,7 @@ import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.wso2.lsp4intellij.client.languageserver.requestmanager.RequestManager;
+import org.wso2.lsp4intellij.client.languageserver.wrapper.LanguageServerWrapper;
 import org.wso2.lsp4intellij.editor.EditorEventManager;
 
 /**
@@ -46,4 +47,14 @@ public interface ClientContext {
      */
     @Nullable
     RequestManager getRequestManager();
+
+    /**
+     * Returns the {@link LanguageServerWrapper} this context was built for, so that entries recorded
+     * by {@code DefaultLanguageClient} can be attributed to a server. {@code null} by default so that
+     * consumers who implement {@link ClientContext} directly are unaffected.
+     */
+    @Nullable
+    default LanguageServerWrapper getWrapper() {
+        return null;
+    }
 }

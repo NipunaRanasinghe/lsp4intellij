@@ -49,6 +49,8 @@ import org.eclipse.lsp4j.services.LanguageClient;
 import org.jetbrains.annotations.NotNull;
 import org.wso2.lsp4intellij.client.languageserver.wrapper.LanguageServerWrapper;
 import org.wso2.lsp4intellij.editor.EditorEventManagerBase;
+import org.wso2.lsp4intellij.logging.LspLogSource;
+import org.wso2.lsp4intellij.logging.LspLogStore;
 import org.wso2.lsp4intellij.requests.WorkspaceEditHandler;
 import org.wso2.lsp4intellij.utils.ApplicationUtils;
 import org.wso2.lsp4intellij.utils.FileUtils;
@@ -162,6 +164,8 @@ public class DefaultLanguageClient implements LanguageClient {
     public void showMessage(MessageParams messageParams) {
         String title = "Language Server message";
         String message = messageParams.getMessage();
+
+        recordLog(LspLogSource.SERVER_MESSAGE, messageParams.getType(), message);
 
         if (isModal) {
             ApplicationUtils.invokeLater(() -> {
@@ -303,6 +307,30 @@ public class DefaultLanguageClient implements LanguageClient {
             default:
                 LOG.warn("Unknown message type '" + msgType + "' for " + message);
                 break;
+        }
+
+        recordLog(LspLogSource.SERVER_LOG, msgType, message);
+    }
+
+    /**
+     * Appends an entry to this project's {@link LspLogStore}, additionally to whatever the caller
+     * already did with {@code messageParams} (the {@link Logger} call in {@link #logMessage}, or the
+     * notification/dialog in {@link #showMessage}). Does nothing if the context cannot name a wrapper
+     * (consumers implementing {@link ClientContext} directly get a {@code null} one by default) or a
+     * project, or once the project has started disposing.
+     */
+    private void recordLog(@NotNull LspLogSource source, @NotNull MessageType level, @NotNull String message) {
+        LanguageServerWrapper wrapper = context.getWrapper();
+        if (wrapper == null) {
+            return;
+        }
+        var project = context.getProject();
+        if (project == null) {
+            return;
+        }
+        LspLogStore store = LspLogStore.getInstanceIfCreated(project);
+        if (store != null) {
+            store.append(wrapper, source, level, message, null);
         }
     }
 

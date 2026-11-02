@@ -68,13 +68,15 @@ Update your `plugin.xml` to include the startup activity:
 
 ## 4. Confirm the language server connection
 
-After successfully connecting to the language server, a green icon will appear in the bottom-right corner of your IDE. Clicking on the icon will display connection details and timeouts.
+After the language server connects, the language server icon in the bottom-right corner of the IDE turns green. Yellow means a server is starting or stopping, and red means it is stopped. With more than one server, the icon shows the least healthy status.
 
 ![Green status icon appearing in the IDE's bottom-right corner after the language server connects](../resources/images/lang-server-connect.gif)
 
-> **Tip:** A green icon in the IDE's bottom-right corner indicates a successful connection to the language server. Clicking on the icon will display connection details and timeouts.
+Hover the icon to see each server's status and recent crash count. Click it to restart the server, set its JSON-RPC trace level, or open the LSP Inspector. While requests are waiting for a response, or after the server has crashed, the popup also links to the matching part of the Inspector.
 
-![Clicking the status icon to open the connection details and timeouts panel](../resources/images/connected-and-timeouts.gif)
+![The popup opened from the language server status icon](../resources/images/lsp4intellij-status-popup.png)
+
+To see the server's log, JSON-RPC traffic, advertised capabilities and response times, use the LSP Inspector. The `plugin.xml` example registers it; see [LSP Inspector](features.md#lsp-inspector) for what it shows.
 
 ---
 
@@ -163,6 +165,8 @@ The LSP4IntelliJ language client applies the following default timeouts to LSP r
 | References      |         2000         |
 | Shutdown        |         5000         |
 | WillSave        |         2000         |
+
+The LSP Inspector's **Timeouts** tab shows, per request type, how many requests got a response within their timeout and how many timed out.
 
 The client exposes the following methods for inspecting and overriding these values at runtime:
 

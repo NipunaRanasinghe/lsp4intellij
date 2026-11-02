@@ -34,6 +34,11 @@ see also jetbrains documentation: https://plugins.jetbrains.com/docs/intellij/pl
                                 id="org.wso2.lsp4intellij.statusbar.LSPServerStatusWidgetFactory"
                                 order="first" />
 
+        <!-- for the LSP Inspector tool window; the status bar widget's "Open LSP Inspector" action
+             looks it up by this id and is hidden if it is not registered -->
+        <toolWindow id="LSP Inspector" anchor="bottom"
+                    factoryClass="org.wso2.lsp4intellij.inspector.LspInspectorToolWindowFactory" />
+
         <!-- needed for completion -->
         <completion.contributor implementationClass="org.wso2.lsp4intellij.contributors.LSPCompletionContributor"
                                 id="org.wso2.lsp4intellij.contributors.LSPCompletionContributor" language="YOUR_LANGUAGE_ID"/>

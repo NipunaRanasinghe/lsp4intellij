@@ -25,7 +25,6 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.MessageType;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.wm.impl.status.widget.StatusBarWidgetsManager;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.remoteServer.util.CloudNotifier;
@@ -57,6 +56,7 @@ import org.eclipse.lsp4j.RangeFormattingCapabilities;
 import org.eclipse.lsp4j.ReferencesCapabilities;
 import org.eclipse.lsp4j.RenameCapabilities;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.SignatureHelpCapabilities;
 import org.eclipse.lsp4j.SymbolCapabilities;
 import org.eclipse.lsp4j.SynchronizationCapabilities;
@@ -91,11 +91,15 @@ import org.wso2.lsp4intellij.listeners.DocumentListenerImpl;
 import org.wso2.lsp4intellij.listeners.EditorMouseListenerImpl;
 import org.wso2.lsp4intellij.listeners.EditorMouseMotionListenerImpl;
 import org.wso2.lsp4intellij.listeners.LSPCaretListenerImpl;
+import org.wso2.lsp4intellij.logging.LspLogSource;
+import org.wso2.lsp4intellij.logging.LspLogStore;
+import org.wso2.lsp4intellij.logging.LspTraceLevel;
+import org.wso2.lsp4intellij.logging.TracingMessageConsumer;
 import org.wso2.lsp4intellij.requests.RequestExecutor;
+import org.wso2.lsp4intellij.requests.RequestStats;
+import org.wso2.lsp4intellij.requests.TimeoutStats;
 import org.wso2.lsp4intellij.requests.Timeouts;
 import org.wso2.lsp4intellij.services.LspServerManager;
-import org.wso2.lsp4intellij.statusbar.LSPServerStatusWidget;
-import org.wso2.lsp4intellij.statusbar.LSPServerStatusWidgetFactory;
 import org.wso2.lsp4intellij.utils.FileUtils;
 import org.wso2.lsp4intellij.utils.LSPException;
 
@@ -106,6 +110,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -151,7 +156,8 @@ public class LanguageServerWrapper {
     private LanguageServer languageServer;
     private LanguageClient client;
     private RequestManager requestManager;
-    private InitializeResult initializeResult;
+    // Set on the launcher thread, read by the LSP Inspector on the EDT.
+    private volatile InitializeResult initializeResult;
     private Future<?> launcherFuture;
     private ExecutorService launcherExecutor;
     private final ExecutorService dispatcher;
@@ -162,6 +168,12 @@ public class LanguageServerWrapper {
     private volatile boolean alreadyShownTimeout = false;
     private volatile boolean alreadyShownCrash = false;
     private volatile ServerStatus status = STOPPED;
+    private volatile LspTraceLevel traceLevel = LspTraceLevel.OFF;
+    private final TimeoutStats timeoutStats = new TimeoutStats();
+    private final RequestStats requestStats = new RequestStats();
+    // Requests sent or received by the current server process and not yet answered. Replaced on each
+    // start, so a request the previous process never answered does not stay listed.
+    private volatile Map<String, TracingMessageConsumer.InFlightRequest> inFlightRequests = new ConcurrentHashMap<>();
     private static final Logger LOG = Logger.getInstance(LanguageServerWrapper.class);
     private static final CloudNotifier notifier = new CloudNotifier("Language Server Protocol client");
 
@@ -309,7 +321,34 @@ public class LanguageServerWrapper {
     }
 
     public void notifyResult(Timeouts timeouts, boolean success) {
-        getWidget().ifPresent(widget -> widget.notifyResult(timeouts, success));
+        timeoutStats.recordResult(timeouts, success);
+    }
+
+    /**
+     * Returns this wrapper's timeout success/failure counters, read by the LSP Inspector's Details
+     * tab. See {@link #notifyResult(Timeouts, boolean)} for how they are updated.
+     */
+    public TimeoutStats getTimeoutStats() {
+        return timeoutStats;
+    }
+
+    /**
+     * Returns this wrapper's per-method response times, read by the LSP Inspector's Requests tab.
+     */
+    @NotNull
+    public RequestStats getRequestStats() {
+        return requestStats;
+    }
+
+    /**
+     * Returns the requests the current server process has sent or received and not yet answered,
+     * oldest first. Requests left unanswered by a process that stopped stay listed until the next start.
+     */
+    @NotNull
+    public List<TracingMessageConsumer.InFlightRequest> getPendingRequests() {
+        List<TracingMessageConsumer.InFlightRequest> pending = new ArrayList<>(inFlightRequests.values());
+        pending.sort(Comparator.comparingLong(TracingMessageConsumer.InFlightRequest::startNanos));
+        return pending;
     }
 
     public void notifySuccess(Timeouts timeouts) {
@@ -583,8 +622,10 @@ public class LanguageServerWrapper {
                 InitializeParams initParams = getInitParams();
                 ExecutorService executorService = Executors.newCachedThreadPool();
                 launcherExecutor = executorService;
+                inFlightRequests = new ConcurrentHashMap<>();
                 MessageHandler messageHandler = new MessageHandler(
-                        serverDefinition.getServerListener(), () -> getStatus() != STOPPED);
+                        serverDefinition.getServerListener(), () -> getStatus() != STOPPED,
+                        this, this::getTraceLevel, inFlightRequests);
                 if (extManager != null && extManager.getExtendedServerInterface() != null) {
                     Class<? extends LanguageServer> remoteServerInterFace = extManager.getExtendedServerInterface();
                     client = extManager.getExtendedClientFor(new ServerWrapperBaseClientContext(this));
@@ -622,6 +663,12 @@ public class LanguageServerWrapper {
                     // send the initialized message since some language servers depends on this message
                     requestManager.initialized(new InitializedParams());
                     setStatus(INITIALIZED);
+                    // Only announce a level that differs from the protocol default. Sending
+                    // $/setTrace unconditionally would put a notification on the wire for every
+                    // server at startup that it did not receive before this feature existed.
+                    if (traceLevel != LspTraceLevel.OFF) {
+                        sendSetTrace(traceLevel);
+                    }
                     return res;
                 });
             } catch (LSPException | IOException | URISyntaxException e) {
@@ -709,12 +756,79 @@ public class LanguageServerWrapper {
         return status;
     }
 
+    /**
+     * Returns the server's {@code initialize} response, or null if it has not initialized. Unlike
+     * {@link #getServerCapabilities()}, never starts the server or waits for it.
+     */
+    @Nullable
+    public InitializeResult getInitializeResult() {
+        return initializeResult;
+    }
+
+    /**
+     * Returns how many times the server has crashed since the last time the user was asked whether
+     * to keep restarting it.
+     */
+    public int getCrashCount() {
+        return crashCount.get();
+    }
+
     private void setStatus(ServerStatus status) {
         this.status = status;
-        getWidget().ifPresent(widget -> widget.setStatus(status));
+        recordLifecycle(status);
+    }
+
+    /**
+     * Appends a {@code LIFECYCLE} entry for one status transition. {@code STARTING} is the first
+     * transition a wrapper ever makes, so it is the one call site allowed to create this project's
+     * {@link LspLogStore}; every later transition only records into a store that must already exist,
+     * tolerating its absence the same way {@link #unmapUri(String)} tolerates a disposed project.
+     */
+    private void recordLifecycle(ServerStatus status) {
+        LspLogStore store = status == STARTING
+                ? LspLogStore.getInstance(project)
+                : LspLogStore.getInstanceIfCreated(project);
+        if (store != null) {
+            store.append(this, LspLogSource.LIFECYCLE, org.eclipse.lsp4j.MessageType.Info, status.toString(), null);
+        }
+    }
+
+    /**
+     * Returns the current JSON-RPC trace level for this server. {@code OFF} until changed with
+     * {@link #setTraceLevel(LspTraceLevel)}.
+     */
+    public LspTraceLevel getTraceLevel() {
+        return traceLevel;
+    }
+
+    /**
+     * Changes the JSON-RPC trace level {@link org.wso2.lsp4intellij.logging.TracingMessageConsumer}
+     * reads for this server, and asks the server to match via {@code $/setTrace} if it is connected.
+     */
+    public void setTraceLevel(LspTraceLevel traceLevel) {
+        this.traceLevel = traceLevel;
+        sendSetTrace(traceLevel);
+    }
+
+    /**
+     * Sends {@code $/setTrace} for the given level. A notification, so a server that does not
+     * implement it has nothing to reply with; any failure sending it (including one thrown
+     * synchronously by the proxy) is logged rather than allowed to break the caller.
+     */
+    private void sendSetTrace(LspTraceLevel traceLevel) {
+        LanguageServer server = languageServer;
+        if (server == null) {
+            return;
+        }
+        try {
+            server.setTrace(new SetTraceParams(traceLevel.traceValue()));
+        } catch (Exception e) {
+            LOG.debug("Server for " + serverDefinition + " did not accept $/setTrace", e);
+        }
     }
 
     public void crashed(Exception e) {
+        recordCrash(e);
         if (crashCount.incrementAndGet() <= 3) {
             reconnect();
         } else {
@@ -747,6 +861,18 @@ public class LanguageServerWrapper {
         }
     }
 
+    /**
+     * Appends a {@code LIFECYCLE} entry for a crash. Unlike {@link #recordLifecycle(ServerStatus)},
+     * this never creates the store: a crash can only happen after {@code STARTING} already did.
+     */
+    private void recordCrash(Exception e) {
+        LspLogStore store = LspLogStore.getInstanceIfCreated(project);
+        if (store != null) {
+            store.append(this, LspLogSource.LIFECYCLE, org.eclipse.lsp4j.MessageType.Error,
+                    "Crashed: " + e.getMessage(), null);
+        }
+    }
+
     private void reconnect() {
         // Need to copy by value since connected editors gets cleared during 'stop()' invocation.
         final Set<String> connected = new HashSet<>(urisUnderLspControl);
@@ -768,19 +894,17 @@ public class LanguageServerWrapper {
         return connected;
     }
 
-    private void removeWidget() {
-        getWidget().ifPresent(LSPServerStatusWidget::dispose);
-    }
-
     /**
      * Cleanup when the project is disposed. This removes the project from static maps
      * to prevent memory leaks.
      */
     public synchronized void dispose() {
         stop(true);
-        removeWidget();
         dispatcher.shutdownNow();
         IntellijLanguageClient.removeWrapper(this);
+        // This server's log buffer is deliberately left in place: a server that has just died is
+        // exactly the one whose log someone wants to read. LspLogStore drops every buffer when the
+        // project itself is disposed.
     }
 
     /**
@@ -897,20 +1021,6 @@ public class LanguageServerWrapper {
             }
             reloadEditors(project);
         });
-    }
-
-    private Optional<LSPServerStatusWidget> getWidget() {
-        try {
-            LSPServerStatusWidgetFactory factory = ((LSPServerStatusWidgetFactory) project
-                    .getService(StatusBarWidgetsManager.class).findWidgetFactory("LSP"));
-            if (factory != null) {
-                return Optional.of(factory.getWidget(project));
-            } else {
-                return Optional.empty();
-            }
-        } catch (Exception e) {
-            return Optional.empty();
-        }
     }
 
     /**
