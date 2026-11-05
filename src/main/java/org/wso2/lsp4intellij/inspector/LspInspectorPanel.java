@@ -124,8 +124,8 @@ import javax.swing.table.TableCellRenderer;
  * each of its definition's extensions), so a tree of servers would be one flat row deep and would
  * spend a quarter of the tool window's width saying what one dropdown says in a line.
  *
- * <p>{@link LspLogListener#entryAdded(LspLogEntry)} fires synchronously on whichever thread produced
- * the entry, which for a traced message is an lsp4j dispatch thread, not the EDT. This panel never
+ * <p>{@link LspLogListener#entryAdded(LanguageServerWrapper, LspLogEntry)} fires synchronously on whichever
+ * thread produced the entry, which for a traced message is an lsp4j dispatch thread, not the EDT. This panel never
  * touches Swing from that callback: it only offers the entry onto a {@link ConcurrentLinkedQueue}, and
  * a recurring {@link Alarm} request — always run on the EDT, since the alarm is created with
  * {@link Alarm.ThreadToUse#SWING_THREAD} — drains the queue in a batch every
