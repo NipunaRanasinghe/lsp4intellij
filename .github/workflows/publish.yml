@@ -1,0 +1,37 @@
+name: Publish to Maven Central
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The project version is calculated from the git tags
+          fetch-depth: 0
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check that the project version matches the tag
+        run: |
+          version=$(./gradlew -q properties --property version | awk '/^version:/ {print $2}')
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Project version '$version' does not match tag '$GITHUB_REF_NAME'"
+            exit 1
+          fi
+      - name: Build and test
+        run: ./gradlew check --stacktrace
+      - name: Publish to Maven Central
+        # Uploads and validates the deployment; it is released from the Central Portal UI
+        run: ./gradlew publishToMavenCentral --stacktrace
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
